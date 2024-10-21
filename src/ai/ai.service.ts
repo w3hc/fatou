@@ -24,19 +24,20 @@ export class AiService {
     }
 
     try {
-      this.logger.log('Sending request to Claude API');
+      this.logger.log('Preparing request for Claude API');
 
-      let content = message;
+      let content = '';
 
       if (file && file.buffer) {
         this.logger.log(`Processing file: ${file.originalname}`);
         const fileContent = file.buffer.toString('utf-8');
-        content += `\n\nHere's the content of the uploaded file ${file.originalname}:\n\n${fileContent}`;
-      } else if (file) {
-        this.logger.log(`File received but no buffer: ${file.originalname}`);
+        content = `Here's the content of the uploaded file ${file.originalname}:\n\n${fileContent}\n\nIt describes an application on which user in working on.\n\nUser's question about this file: ${message}`;
       } else {
-        this.logger.log('No file uploaded');
+        this.logger.log('No file uploaded, using message directly');
+        content = message;
       }
+
+      this.logger.log('Sending request to Claude API');
 
       const messages = [{ role: 'user', content }];
 
