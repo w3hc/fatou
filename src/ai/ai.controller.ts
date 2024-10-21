@@ -1,10 +1,23 @@
-import { Controller, Post, Body, HttpCode, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  Logger,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { AiService } from './ai.service';
-
-class MessageDto {
-  message: string;
-}
+import { Express } from 'express';
+import { AskClaudeDto } from './askClaude.dto';
 
 @ApiTags('AI')
 @Controller('ai')
@@ -15,23 +28,23 @@ export class AiController {
 
   @Post('ask')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Ask a question to Claude' })
-  @ApiResponse({ status: 200, description: 'Returns the response from Claude' })
-  @ApiBody({
-    type: MessageDto,
-    description: 'The message to send to Claude',
-    examples: {
-      example1: {
-        summary: "Ask about Ghana's capital",
-        value: {
-          message: "Hello! What's the capital of Ghana, please?",
-        },
-      },
-    },
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({
+    summary: 'Ask a question to Claude with optional markdown file',
   })
-  async askClaude(@Body() messageDto: MessageDto): Promise<{ answer: string }> {
-    this.logger.log(`Received message in controller: ${messageDto.message}`);
-    const answer = await this.aiService.askClaude(messageDto.message);
+  @ApiResponse({ status: 200, description: 'Returns the response from Claude' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Message to Claude with optional file',
+    type: AskClaudeDto,
+  })
+  async askClaude(
+    @Body() askClaudeDto: AskClaudeDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<{ answer: string }> {
+    this.logger.log(`Received message in controller: ${askClaudeDto.message}`);
+    this.logger.log(`Received file: ${file?.originalname}`);
+    const answer = await this.aiService.askClaude(askClaudeDto.message, file);
     return { answer };
   }
 }

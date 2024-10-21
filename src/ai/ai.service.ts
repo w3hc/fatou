@@ -1,5 +1,6 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Express } from 'express';
 
 @Injectable()
 export class AiService {
@@ -7,7 +8,10 @@ export class AiService {
 
   constructor(private configService: ConfigService) {}
 
-  async askClaude(message: string): Promise<string> {
+  async askClaude(
+    message: string,
+    file?: Express.Multer.File,
+  ): Promise<string> {
     this.logger.log(`Received message in service: ${message}`);
 
     const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
@@ -21,6 +25,21 @@ export class AiService {
 
     try {
       this.logger.log('Sending request to Claude API');
+
+      let content = message;
+
+      if (file && file.buffer) {
+        this.logger.log(`Processing file: ${file.originalname}`);
+        const fileContent = file.buffer.toString('utf-8');
+        content += `\n\nHere's the content of the uploaded file ${file.originalname}:\n\n${fileContent}`;
+      } else if (file) {
+        this.logger.log(`File received but no buffer: ${file.originalname}`);
+      } else {
+        this.logger.log('No file uploaded');
+      }
+
+      const messages = [{ role: 'user', content }];
+
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -30,7 +49,7 @@ export class AiService {
         },
         body: JSON.stringify({
           model: 'claude-3-opus-20240229',
-          messages: [{ role: 'user', content: message }],
+          messages: messages,
           max_tokens: 1000,
         }),
       });
