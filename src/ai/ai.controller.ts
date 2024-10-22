@@ -20,6 +20,7 @@ import { AiService } from './ai.service';
 import { Express } from 'express';
 import { AskClaudeDto } from './askClaude.dto';
 import { diskStorage } from 'multer';
+import { ClaudeResponse } from '../common/types';
 
 @ApiTags('AI')
 @Controller('ai')
@@ -46,8 +47,7 @@ export class AiController {
   })
   @ApiResponse({
     status: 200,
-    description:
-      'Returns AI analysis and response about the uploaded application',
+    description: 'Returns AI analysis, response, and usage costs',
   })
   @ApiResponse({
     status: 400,
@@ -62,7 +62,10 @@ export class AiController {
   async askClaude(
     @Body() askClaudeDto: AskClaudeDto,
     @UploadedFile() file?: Express.Multer.File,
-  ): Promise<{ answer: string }> {
+  ): Promise<{
+    answer: string;
+    usage: { costs: ClaudeResponse['costs']; timestamp: string };
+  }> {
     if (!file) {
       throw new BadRequestException('Application description file is required');
     }
@@ -78,14 +81,21 @@ export class AiController {
       fileSize: file.size,
     });
 
-    const answer = await this.aiService.askClaude(askClaudeDto.message, file);
+    const result = await this.aiService.askClaude(askClaudeDto.message, file);
 
     this.logger.debug({
       message: 'AI analysis completed',
       questionText: askClaudeDto.message,
-      responseLength: answer.length,
+      responseLength: result.answer.length,
+      costs: result.costs,
     });
 
-    return { answer };
+    return {
+      answer: result.answer,
+      usage: {
+        costs: result.costs,
+        timestamp: new Date().toISOString(),
+      },
+    };
   }
 }

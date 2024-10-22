@@ -1,23 +1,61 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { promises as fs } from 'fs';
+import {
+  ClaudeApiResponse,
+  CostMetrics,
+  ClaudeResponse,
+} from '../common/types';
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
+  // Claude 3 Opus pricing per 1K tokens (as of March 2024)
+  private readonly INPUT_COST_PER_1K = 0.015;
+  private readonly OUTPUT_COST_PER_1K = 0.075;
 
   constructor(private configService: ConfigService) {}
 
-  async askClaude(message: string, file: Express.Multer.File): Promise<string> {
+  async askClaude(
+    message: string,
+    file: Express.Multer.File,
+  ): Promise<ClaudeResponse> {
     const apiKey = this.validateConfig();
 
     try {
       const content = await this.preparePrompt(message, file);
       const response = await this.callClaudeApi(content, apiKey);
-      return response;
+      const costs = this.calculateCosts(response.usage);
+
+      this.logger.log({
+        message: 'Claude API request completed',
+        costs,
+        timestamp: new Date().toISOString(),
+      });
+
+      return {
+        answer: response.content[0].text,
+        costs,
+      };
     } catch (error) {
       this.handleError(error);
     }
+  }
+
+  private calculateCosts(usage: {
+    input_tokens: number;
+    output_tokens: number;
+  }): CostMetrics {
+    const inputCost = (usage.input_tokens / 1000) * this.INPUT_COST_PER_1K;
+    const outputCost = (usage.output_tokens / 1000) * this.OUTPUT_COST_PER_1K;
+
+    return {
+      inputCost: Number(inputCost.toFixed(4)),
+      outputCost: Number(outputCost.toFixed(4)),
+      totalCost: Number((inputCost + outputCost).toFixed(4)),
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+    };
   }
 
   private validateConfig(): string {
@@ -60,7 +98,7 @@ Please provide a detailed and specific answer that directly relates to the code 
   private async callClaudeApi(
     content: string,
     apiKey: string,
-  ): Promise<string> {
+  ): Promise<ClaudeApiResponse> {
     this.logger.debug('Initiating Claude API request');
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -82,7 +120,7 @@ Please provide a detailed and specific answer that directly relates to the code 
     }
 
     const data = await response.json();
-    return data.content[0].text;
+    return data;
   }
 
   private handleError(error: any): never {
