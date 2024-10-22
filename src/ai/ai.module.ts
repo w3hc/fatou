@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MulterModule } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 
@@ -8,7 +9,12 @@ import { AiService } from './ai.service';
   imports: [
     ConfigModule,
     MulterModule.register({
-      dest: './uploads',
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          cb(null, `${Date.now()}-${file.originalname}`);
+        },
+      }),
     }),
   ],
   controllers: [AiController],
