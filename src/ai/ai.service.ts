@@ -1,8 +1,6 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Express } from 'express';
 import { promises as fs } from 'fs';
-// import { join } from 'path';
 
 @Injectable()
 export class AiService {
@@ -40,7 +38,6 @@ export class AiService {
     this.logger.debug('Preparing analysis prompt');
 
     try {
-      // Read the file from disk using the path provided by multer
       const fileContent = await fs.readFile(file.path, 'utf-8');
 
       return `Here's the content of the application description file ${file.originalname}:
