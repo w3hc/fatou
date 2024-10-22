@@ -63,12 +63,10 @@ export class AiController {
     @Body() askClaudeDto: AskClaudeDto,
     @UploadedFile() file?: Express.Multer.File,
   ): Promise<{ answer: string }> {
-    // Validate file presence
     if (!file) {
       throw new BadRequestException('Application description file is required');
     }
 
-    // Validate file type (assuming markdown files are expected)
     if (!file.originalname.toLowerCase().endsWith('.md')) {
       throw new BadRequestException('Only markdown (.md) files are supported');
     }
