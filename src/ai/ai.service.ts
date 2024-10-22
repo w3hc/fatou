@@ -1,6 +1,8 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Express } from 'express';
+import { promises as fs } from 'fs';
+// import { join } from 'path';
 
 @Injectable()
 export class AiService {
@@ -8,68 +10,90 @@ export class AiService {
 
   constructor(private configService: ConfigService) {}
 
-  async askClaude(
-    message: string,
-    file?: Express.Multer.File,
-  ): Promise<string> {
-    this.logger.log(`Received message in service: ${message}`);
-
-    const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
-    if (!apiKey) {
-      this.logger.error('Anthropic API key is not set');
-      throw new HttpException(
-        'Anthropic API key is not set',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+  async askClaude(message: string, file: Express.Multer.File): Promise<string> {
+    const apiKey = this.validateConfig();
 
     try {
-      this.logger.log('Preparing request for Claude API');
-
-      let content = '';
-
-      if (file && file.buffer) {
-        this.logger.log(`Processing file: ${file.originalname}`);
-        const fileContent = file.buffer.toString('utf-8');
-        content = `Here's the content of the uploaded file ${file.originalname}:\n\n${fileContent}\n\nIt describes an application on which user in working on.\n\nUser's question about this file: ${message}`;
-      } else {
-        this.logger.log('No file uploaded, using message directly');
-        content = message;
-      }
-
-      this.logger.log('Sending request to Claude API');
-
-      const messages = [{ role: 'user', content }];
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-3-opus-20240229',
-          messages: messages,
-          max_tokens: 1000,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorMessage = `HTTP error! status: ${response.status}`;
-        this.logger.error(errorMessage);
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-      this.logger.log('Received response from Claude API');
-      return data.content[0].text;
+      const content = await this.preparePrompt(message, file);
+      const response = await this.callClaudeApi(content, apiKey);
+      return response;
     } catch (error) {
-      this.logger.error('Error communicating with Claude API:', error);
+      this.handleError(error);
+    }
+  }
+
+  private validateConfig(): string {
+    const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
+    if (!apiKey) {
       throw new HttpException(
-        'Error communicating with Claude API',
+        'Anthropic API key is not configured',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+    return apiKey;
+  }
+
+  private async preparePrompt(
+    message: string,
+    file: Express.Multer.File,
+  ): Promise<string> {
+    this.logger.debug('Preparing analysis prompt');
+
+    try {
+      // Read the file from disk using the path provided by multer
+      const fileContent = await fs.readFile(file.path, 'utf-8');
+
+      return `Here's the content of the application description file ${file.originalname}:
+
+${fileContent}
+
+Based on this application description, please address the following question:
+${message}
+
+Please provide a detailed and specific answer that directly relates to the code and architecture shown in the description file.`;
+    } catch (error) {
+      this.logger.error('Error reading file:', error);
+      throw new HttpException(
+        'Error reading uploaded file',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  private async callClaudeApi(
+    content: string,
+    apiKey: string,
+  ): Promise<string> {
+    this.logger.debug('Initiating Claude API request');
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content }],
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Claude API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.content[0].text;
+  }
+
+  private handleError(error: any): never {
+    this.logger.error('AI service error:', error);
+
+    throw new HttpException(
+      'Error processing AI analysis request',
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
 }
