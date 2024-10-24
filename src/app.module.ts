@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { AiModule } from './ai/ai.module';
+import { ApiKeyGuard } from './auth/auth.guard';
+import { AuthModule } from './auth/auth.module';
 import { Web3Module } from './web3/web3.module';
 
 @Module({
@@ -9,9 +12,14 @@ import { Web3Module } from './web3/web3.module';
       isGlobal: true,
     }),
     AiModule,
+    AuthModule,
     Web3Module,
   ],
-  controllers: [],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ApiKeyGuard,
+    },
+  ],
 })
 export class AppModule {}
