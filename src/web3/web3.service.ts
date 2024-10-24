@@ -10,12 +10,10 @@ export class Web3Service {
 
   constructor(private configService: ConfigService) {
     this.provider = new ethers.JsonRpcProvider(
-      this.configService.get<string>('SEPOLIA_RPC_URL'),
+      this.configService.get<string>('BASE_RPC_URL'),
     );
 
-    const tokenAddress = this.configService.get<string>(
-      'SEPOLIA_TOKEN_ADDRESS',
-    );
+    const tokenAddress = this.configService.get<string>('BASE_TOKEN_ADDRESS');
     this.tokenContract = new ethers.Contract(
       tokenAddress,
       ['function balanceOf(address owner) view returns (uint256)'],
