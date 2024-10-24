@@ -77,6 +77,16 @@ http://193.108.55.119:3000/ai/ask
 
 The uploaded files are stored in the `uploads` folder.
 
+## Update Infomaniak VPS
+
+```
+git pull origin main
+pnpm i
+pnpm build
+pm2 restart fatou
+pm2 logs
+```
+
 ## Support
 
 You can contact me via [Element](https://matrix.to/#/@julienbrg:matrix.org), [Farcaster](https://warpcast.com/julien-), [Telegram](https://t.me/julienbrg), [Twitter](https://twitter.com/julienbrg), [Discord](https://discordapp.com/users/julienbrg), or [LinkedIn](https://www.linkedin.com/in/julienberanger/).
