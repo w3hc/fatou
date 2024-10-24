@@ -2,8 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { AiModule } from './ai/ai.module';
-import { Web3Module } from './web3/web3.module';
 import { ApiKeyGuard } from './auth/auth.guard';
+import { AuthModule } from './auth/auth.module';
+import { Web3Module } from './web3/web3.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { ApiKeyGuard } from './auth/auth.guard';
       isGlobal: true,
     }),
     AiModule,
+    AuthModule,
     Web3Module,
   ],
   providers: [
