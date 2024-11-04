@@ -58,10 +58,13 @@ export class AiController {
     }),
   )
   @ApiOperation({
-    summary: 'Ask questions with conversation context',
+    summary: 'Ask questions with or without application context',
     description:
-      'Submit questions while maintaining conversation context. Include conversationId to continue an existing conversation. ' +
-      'Optionally attach a markdown file for additional context.',
+      'Submit questions to Claude in two modes:\n\n' +
+      '1. With Application Context: Attach a markdown (.md) file containing application code/documentation. ' +
+      'Claude will analyze the attached document and answer questions specifically about that codebase.\n\n' +
+      '2. General Questions: Without a file attachment, Claude will answer general questions without specific application context.\n\n' +
+      'Use conversationId to continue an existing conversation in either mode.',
   })
   @ApiHeader({
     name: 'x-api-key',
