@@ -44,7 +44,7 @@ export class AiController {
         },
       }),
       fileFilter: (req, file, cb) => {
-        if (!file.originalname.toLowerCase().endsWith('.md')) {
+        if (file && !file.originalname.toLowerCase().endsWith('.md')) {
           cb(
             new BadRequestException('Only markdown (.md) files are supported'),
             false,
@@ -58,11 +58,13 @@ export class AiController {
     }),
   )
   @ApiOperation({
-    summary:
-      'Analyze application description file and answer related questions',
+    summary: 'Ask questions with or without application context',
     description:
-      'Submit a markdown file containing application description and ask questions about it. ' +
-      'The AI will analyze the file and provide detailed responses based on the content.',
+      'Submit questions to Claude in two modes:\n\n' +
+      '1. With Application Context: Attach a markdown (.md) file containing application code/documentation. ' +
+      'Claude will analyze the attached document and answer questions specifically about that codebase.\n\n' +
+      '2. General Questions: Without a file attachment, Claude will answer general questions without specific application context.\n\n' +
+      'Use conversationId to continue an existing conversation in either mode.',
   })
   @ApiHeader({
     name: 'x-api-key',
@@ -72,13 +74,12 @@ export class AiController {
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description:
-      'Question about the application with accompanying description file',
+    description: 'Question with optional file and conversation ID',
     type: AskClaudeDto,
   })
   @ApiResponse({
     status: 200,
-    description: 'Analysis successful',
+    description: 'Response successful',
     schema: {
       type: 'object',
       properties: {
@@ -92,75 +93,23 @@ export class AiController {
             costs: {
               type: 'object',
               properties: {
-                inputCost: {
-                  type: 'number',
-                  description: 'Cost for input tokens',
-                },
-                outputCost: {
-                  type: 'number',
-                  description: 'Cost for output tokens',
-                },
-                totalCost: {
-                  type: 'number',
-                  description: 'Total cost of the request',
-                },
-                inputTokens: {
-                  type: 'number',
-                  description: 'Number of input tokens',
-                },
-                outputTokens: {
-                  type: 'number',
-                  description: 'Number of output tokens',
-                },
+                inputCost: { type: 'number' },
+                outputCost: { type: 'number' },
+                totalCost: { type: 'number' },
+                inputTokens: { type: 'number' },
+                outputTokens: { type: 'number' },
               },
             },
             timestamp: {
               type: 'string',
               format: 'date-time',
-              description: 'Timestamp of the request',
             },
           },
         },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 400,
-    description:
-      'Bad Request - Invalid file format or missing required parameters',
-    schema: {
-      type: 'object',
-      properties: {
-        statusCode: { type: 'number', example: 400 },
-        message: {
+        conversationId: {
           type: 'string',
-          example: 'Only markdown (.md) files are supported',
+          description: 'ID to use for continuing this conversation',
         },
-        error: { type: 'string', example: 'Bad Request' },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - Invalid or missing API key',
-    schema: {
-      type: 'object',
-      properties: {
-        statusCode: { type: 'number', example: 401 },
-        message: { type: 'string', example: 'Invalid API key' },
-        error: { type: 'string', example: 'Unauthorized' },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 413,
-    description: 'Payload Too Large - File size exceeds limit',
-    schema: {
-      type: 'object',
-      properties: {
-        statusCode: { type: 'number', example: 413 },
-        message: { type: 'string', example: 'File size exceeds the 5MB limit' },
-        error: { type: 'string', example: 'Payload Too Large' },
       },
     },
   })
@@ -170,23 +119,24 @@ export class AiController {
   ): Promise<{
     answer: string;
     usage: { costs: ClaudeResponse['costs']; timestamp: string };
+    conversationId: string;
   }> {
-    if (!file) {
-      throw new BadRequestException('Application description file is required');
-    }
-
     this.logger.debug({
-      message: 'Processing AI analysis request',
+      message: 'Processing AI request',
       questionText: askClaudeDto.message,
-      fileName: file.originalname,
-      fileSize: file.size,
+      conversationId: askClaudeDto.conversationId,
+      fileName: file?.originalname,
     });
 
-    const result = await this.aiService.askClaude(askClaudeDto.message, file);
+    const result = await this.aiService.askClaude(
+      askClaudeDto.message,
+      file,
+      askClaudeDto.conversationId,
+    );
 
     this.logger.debug({
-      message: 'AI analysis completed',
-      questionText: askClaudeDto.message,
+      message: 'AI response completed',
+      conversationId: result.conversationId,
       responseLength: result.answer.length,
       costs: result.costs,
     });
@@ -197,6 +147,7 @@ export class AiController {
         costs: result.costs,
         timestamp: new Date().toISOString(),
       },
+      conversationId: result.conversationId,
     };
   }
 }
