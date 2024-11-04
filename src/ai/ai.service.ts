@@ -8,6 +8,7 @@ import {
   Conversation,
 } from '../common/types';
 import { DatabaseService } from '../database/database.service';
+import { CostTrackingService } from '../database/cost-tracking.service';
 
 @Injectable()
 export class AiService {
@@ -19,6 +20,7 @@ export class AiService {
   constructor(
     private configService: ConfigService,
     private databaseService: DatabaseService,
+    private costTrackingService: CostTrackingService,
   ) {}
 
   async askClaude(
@@ -65,6 +67,13 @@ export class AiService {
       // Call Claude API
       const response = await this.callClaudeApi(content, apiKey);
       const costs = this.calculateCosts(response.usage);
+
+      await this.costTrackingService.trackRequest(
+        '0x', // You'll need to pass this from the controller
+        costs,
+        message,
+        conversationId,
+      );
 
       // Store the interaction in conversation history
       await this.databaseService.addMessage(conversationId, {
