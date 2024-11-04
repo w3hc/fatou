@@ -17,4 +17,24 @@ export interface CostMetrics {
 export interface ClaudeResponse {
   answer: string;
   costs: CostMetrics;
+  conversationId?: string;
+}
+
+export interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface Conversation {
+  id: string;
+  messages: Message[];
+  fileName?: string;
+  fileContent?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationHistory {
+  conversations: { [id: string]: Conversation };
 }

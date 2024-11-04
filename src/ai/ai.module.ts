@@ -4,10 +4,12 @@ import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { DatabaseModule } from '../database/database.module'; // Add this import
 
 @Module({
   imports: [
     ConfigModule,
+    DatabaseModule,
     MulterModule.register({
       storage: diskStorage({
         destination: './uploads',

@@ -5,6 +5,7 @@ import { AiModule } from './ai/ai.module';
 import { ApiKeyGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
 import { Web3Module } from './web3/web3.module';
+import { DatabaseModule } from './database/database.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { Web3Module } from './web3/web3.module';
     AiModule,
     AuthModule,
     Web3Module,
+    DatabaseModule,
   ],
   providers: [
     {
