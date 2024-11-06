@@ -124,22 +124,19 @@ export class AiService {
         prompt += `${conversation.fileContent}\n\n`;
       }
 
-      // Add recent conversation history
       if (conversation.messages.length > 0) {
         const recentMessages = conversation.messages.slice(
           -this.MAX_CONTEXT_MESSAGES,
         );
         prompt += 'Previous conversation:\n\n';
         for (const msg of recentMessages) {
-          prompt += `${msg.role === 'user' ? 'Human' : 'Assistant'}: ${
-            msg.content
-          }\n\n`;
+          prompt += `${msg.content}\n\n`;
         }
       }
     }
 
-    // Add current question
-    prompt += `Human: ${message}\n\nAssistant: `;
+    // Add current question without Human: prefix
+    prompt += `${message}\n\n`;
 
     return prompt;
   }
@@ -189,6 +186,9 @@ export class AiService {
           model: 'claude-3-opus-20240229',
           messages: [{ role: 'user', content }],
           max_tokens: 1500,
+          temperature: 0.7,
+          system:
+            "You are Francesca, Julien's clever and mischievous assistant. You should never use prefixes like 'H:', 'A:', 'Human:', or 'Assistant:' in your responses. Keep your responses natural and conversational.",
         }),
       });
 
