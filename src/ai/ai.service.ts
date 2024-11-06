@@ -58,18 +58,28 @@ export class AiService {
           message: 'Created new conversation',
           conversationId,
           fileName: file?.originalname,
+          hasFileContent: !!file,
         });
       }
 
       // Prepare prompt with conversation history
       const content = await this.preparePrompt(message, conversation);
 
+      // Log prompt for debugging (excluding sensitive data)
+      this.logger.debug({
+        message: 'Prepared prompt',
+        promptLength: content.length,
+        conversationId,
+        hasFileContent: !!conversation?.fileContent,
+        messageCount: conversation?.messages.length,
+      });
+
       // Call Claude API
       const response = await this.callClaudeApi(content, apiKey);
       const costs = this.calculateCosts(response.usage);
 
       await this.costTrackingService.trackRequest(
-        '0x', // You'll need to pass this from the controller
+        '0x',
         costs,
         message,
         conversationId,
@@ -97,7 +107,8 @@ export class AiService {
         conversationId,
       };
     } catch (error) {
-      this.handleError(error);
+      this.logger.error('AI service error:', error);
+      throw this.handleError(error);
     }
   }
 
@@ -108,9 +119,9 @@ export class AiService {
     let prompt = '';
 
     if (conversation) {
-      // Add file content if it exists
+      // Add file content if it exists (now treated as context)
       if (conversation.fileContent) {
-        prompt += `Here's the content of the application description file ${conversation.fileName}:\n\n${conversation.fileContent}\n\n`;
+        prompt += `${conversation.fileContent}\n\n`;
       }
 
       // Add recent conversation history
@@ -120,7 +131,9 @@ export class AiService {
         );
         prompt += 'Previous conversation:\n\n';
         for (const msg of recentMessages) {
-          prompt += `${msg.role === 'user' ? 'Human' : 'Assistant'}: ${msg.content}\n\n`;
+          prompt += `${msg.role === 'user' ? 'Human' : 'Assistant'}: ${
+            msg.content
+          }\n\n`;
         }
       }
     }
