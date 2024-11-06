@@ -1,8 +1,10 @@
 # Fatou
 
-Fatou is a Nest.js-based API that interacts with several different LLM services.
+Fatou is a Nest.js-based API that interacts with several different LLM services. It uses only Claude for now (`claude-3-opus-20240229`). 
 
-App description files can beb generated using [Zhankai](https://github.com/w3hc/zhankai).
+App description files can be generated using [Zhankai](https://github.com/w3hc/zhankai).
+
+Fatou is also used by [ask-my-assistant](https://github.com/julienbrg/ask-my-assistant) UI (view [live demo](https://ask-my-assistant.netlify.app/)). 
 
 ## Installation
 

@@ -61,9 +61,9 @@ export class AiController {
     summary: 'Ask questions with or without application context',
     description:
       'Submit questions to Claude in two modes:\n\n' +
-      '1. With Application Context: Attach a markdown (.md) file containing application code/documentation. ' +
-      'Claude will analyze the attached document and answer questions specifically about that codebase.\n\n' +
-      '2. General Questions: Without a file attachment, Claude will answer general questions without specific application context.\n\n' +
+      '1. With Context: Attach a markdown (.md) file containing context (persona, knowledge base, etc). ' +
+      'Claude will use this context to shape its responses.\n\n' +
+      '2. General Questions: Without a file attachment, Claude will answer based on existing conversation history.\n\n' +
       'Use conversationId to continue an existing conversation in either mode.',
   })
   @ApiHeader({
@@ -74,7 +74,7 @@ export class AiController {
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description: 'Question with optional file and conversation ID',
+    description: 'Question with optional context file and conversation ID',
     type: AskClaudeDto,
   })
   @ApiResponse({
@@ -112,6 +112,18 @@ export class AiController {
         },
       },
     },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request (bad file format, missing message)',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid API key',
+  })
+  @ApiResponse({
+    status: 413,
+    description: 'File too large (>5MB)',
   })
   async askClaude(
     @Body() askClaudeDto: AskClaudeDto,
