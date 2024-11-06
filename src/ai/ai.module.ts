@@ -4,7 +4,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
-import { DatabaseModule } from '../database/database.module'; // Add this import
+import { DatabaseModule } from '../database/database.module';
 
 @Module({
   imports: [
