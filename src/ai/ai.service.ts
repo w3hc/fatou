@@ -192,19 +192,25 @@ export class AiService {
         }),
       });
 
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Invalid JSON response: ${text}`);
+      }
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          `Claude API error: ${response.status} - ${JSON.stringify(errorData)}`,
+          `Claude API error: ${response.status} - ${JSON.stringify(data)}`,
         );
       }
 
-      const data = await response.json();
       return data;
     } catch (error) {
       this.logger.error('Error calling Claude API:', error);
       throw new HttpException(
-        'Error communicating with Claude API',
+        error.message || 'Error communicating with Claude API',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
