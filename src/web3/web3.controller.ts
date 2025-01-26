@@ -142,7 +142,7 @@ export class AuthController {
       throw new UnauthorizedException('Insufficient token balance');
     }
 
-    const apiKey = this.web3Service.generateApiKey();
+    const apiKey = await this.web3Service.generateApiKey(body.walletAddress);
     return { apiKey };
   }
 }

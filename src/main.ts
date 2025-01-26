@@ -9,10 +9,7 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Fatou')
-    .setDescription(
-      'Fatou is a Nest.js-based API that interacts with AI and Web3 services. ' +
-        'All endpoints require authentication via API key unless marked as public.',
-    )
+    .setDescription('Fatou API Documentation')
     .setVersion('0.1')
     .addApiKey(
       {
@@ -21,29 +18,18 @@ async function bootstrap() {
         in: 'header',
         description: 'Please enter your API key',
       },
-      'api-key',
+      'x-api-key',
     )
-    .addTag('AI', 'Artificial Intelligence related endpoints')
-    .addTag('Web3', 'Web3 related endpoints')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-
   SwaggerModule.setup('api', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
       tagsSorter: 'alpha',
       operationsSorter: 'alpha',
       docExpansion: 'list',
-      filter: true,
-      tryItOutEnabled: true,
-      defaultModelsExpandDepth: 1,
-      defaultModelExpandDepth: 1,
-      displayRequestDuration: true,
-      showExtensions: true,
-      showCommonExtensions: true,
     },
-    customSiteTitle: 'Fatou API Documentation',
   });
 
   await app.listen(3000);

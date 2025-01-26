@@ -6,6 +6,7 @@ import { ApiKeyGuard } from './auth/auth.guard';
 import { AuthModule } from './auth/auth.module';
 import { Web3Module } from './web3/web3.module';
 import { DatabaseModule } from './database/database.module';
+import { ApiKeysModule } from './api-keys/api-keys.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { DatabaseModule } from './database/database.module';
     AuthModule,
     Web3Module,
     DatabaseModule,
+    ApiKeysModule,
   ],
   providers: [
     {

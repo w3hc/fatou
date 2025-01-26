@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ethers } from 'ethers';
 import { ConfigService } from '@nestjs/config';
+import { ApiKeysService } from '../api-keys/api-keys.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -8,7 +9,10 @@ export class Web3Service {
   private readonly provider: ethers.Provider;
   private readonly tokenContract: ethers.Contract;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private apiKeysService: ApiKeysService,
+  ) {
     this.provider = new ethers.JsonRpcProvider(
       this.configService.get<string>('BASE_RPC_URL'),
     );
@@ -51,8 +55,8 @@ export class Web3Service {
     }
   }
 
-  generateApiKey(): string {
-    const apiKey = this.configService.get<string>('API_KEY');
-    return apiKey;
+  async generateApiKey(walletAddress: string): Promise<string> {
+    const apiKey = await this.apiKeysService.createApiKey(walletAddress);
+    return apiKey.key;
   }
 }
