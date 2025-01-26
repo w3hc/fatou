@@ -27,7 +27,7 @@ export class ApiKeyGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest<Request>();
-    const apiKey = request.header('api-key');
+    const apiKey = request.header('x-api-key');
     const masterKey = this.configService.get<string>('MASTER_KEY');
 
     if (!apiKey) {

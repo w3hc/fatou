@@ -65,7 +65,7 @@ export class AiController {
       'Use conversationId to continue an existing conversation in either mode.',
   })
   @ApiHeader({
-    name: 'api-key',
+    name: 'x-api-key',
     description: 'API key for authentication',
     required: true,
     example: 'your-api-key-here',
