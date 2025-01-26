@@ -2,61 +2,64 @@
 
 ## Overview
 
-Fatou is a Nest.js-based API that provides an interface to Claude, an advanced language model, with specific capabilities for analyzing software applications. The API supports two distinct modes of operation: general querying and application-specific analysis.
+Fatou is a Nest.js-based API that provides an interface to Claude, an advanced language model. The API enables two primary modes of operation:
+
+1. Application Analysis Mode - For analyzing codebases and providing technical insights
+2. General Query Mode - For standard AI interactions and conversations
 
 ## Authentication
 
-All endpoints require API key authentication unless marked as public.
+### API Key Types
 
-### Headers
-```
-x-api-key: your-api-key-here
-```
+1. **Master Key**
+   - Full administrative access
+   - Set via `MASTER_KEY` environment variable
+   - Required for administrative endpoints
+
+2. **User API Keys**
+   - Generated after token verification
+   - Limited to AI interaction endpoints
+   - Automatically tracked for usage and billing
 
 ### Obtaining an API Key
 
-1. Call the `/auth/get-message` endpoint with your Ethereum wallet address
-2. Sign the returned message using your wallet
-3. Call the `/auth/verify` endpoint with the signature to receive your API key
+1. Call `/auth/get-message`
+2. Sign the message with your Ethereum wallet
+3. Call `/auth/verify` with the signature
+4. Hold minimum required token balance (1 token)
+
+### Authentication Headers
+```http
+x-api-key: your-api-key-here
+```
 
 ## Core Endpoints
 
-### 1. Ask Claude (`POST /ai/ask`)
+### AI Interaction
 
-Endpoint for interacting with Claude in two distinct modes.
+#### POST /ai/ask
 
-#### Modes of Operation
+Primary endpoint for interacting with Claude in both analysis and general modes.
 
-##### A. Application Analysis Mode
-- Requires a markdown (.md) file attachment containing application code/documentation
-- Claude analyzes the provided codebase and answers questions in that specific context
-- Ideal for: code review, architecture analysis, improvement suggestions, bug fixing
-
-##### B. General Query Mode
-- No file attachment needed
-- Claude answers questions without specific application context
-- Suitable for: general programming questions, conceptual explanations, best practices
-
-#### Request Format
-
+**Request Format**
 ```http
 POST /ai/ask
 Content-Type: multipart/form-data
 x-api-key: your-api-key-here
 
 Form Data:
-- message: "Your question here"
-- file: (optional) markdown_file.md
-- conversationId: (optional) "previous-conversation-id"
+- message: string (required)
+- file: .md file (optional)
+- conversationId: string (optional)
 ```
 
-#### File Requirements
+**File Requirements**
 - Format: Markdown (.md) only
 - Size Limit: 5MB
 - Content: Application code, documentation, or project description
+- Structure: Logical sections with clear headers
 
-#### Response Format
-
+**Response Format**
 ```json
 {
   "answer": "Claude's response text",
@@ -74,29 +77,27 @@ Form Data:
 }
 ```
 
-### 2. Get Authentication Message (`POST /auth/get-message`)
+### Authentication Flow
 
-Public endpoint to begin the authentication process.
+#### POST /auth/get-message
 
-#### Request
+**Request**
 ```json
 {
   "walletAddress": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
 }
 ```
 
-#### Response
+**Response**
 ```json
 {
   "message": "zhankai_auth_0x742d...4438f44e_1729772340442_caa3334b-2dec-4f4e-8aa4-0415f2eb3e71"
 }
 ```
 
-### 3. Verify Signature (`POST /auth/verify`)
+#### POST /auth/verify
 
-Public endpoint to complete authentication and receive API key.
-
-#### Request
+**Request**
 ```json
 {
   "walletAddress": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
@@ -105,7 +106,7 @@ Public endpoint to complete authentication and receive API key.
 }
 ```
 
-#### Response
+**Response**
 ```json
 {
   "apiKey": "your-api-key"
@@ -114,46 +115,45 @@ Public endpoint to complete authentication and receive API key.
 
 ## Conversation Management
 
-### Conversation Context
-- The API maintains conversation history using `conversationId`
-- Include the `conversationId` in subsequent requests to continue a conversation
+### Context Persistence
+- Conversations tracked via `conversationId`
 - Maximum context: 10 previous messages
-- File context (if provided) persists throughout the conversation
+- File context persists throughout conversation
+- Each new file upload creates new conversation
 
 ### Storage
-- Uploaded files are stored in the `uploads` folder
-- Conversation history is stored in `data/db.json`
-- Regular cleanup of old files/conversations is recommended
+- Files: `uploads/` directory
+- Conversations: `data/db.json`
+- API Keys: `data/api-keys.json`
+- Costs: `data/costs.json`
 
-## Rate Limiting and Costs
+### Cleanup
+- Implement regular cleanup for uploaded files
+- Archive old conversations periodically
+- Monitor storage usage
+
+## Rate Limiting & Costs
 
 ### Token Usage
-- Input Cost: $0.015 per 1K tokens
-- Output Cost: $0.075 per 1K tokens
-- Costs are tracked per request in the response
+- Input: $0.015 per 1K tokens
+- Output: $0.075 per 1K tokens
+- Costs tracked per request
+- Billing aggregated by wallet address
 
-## Best Practices
-
-### For Application Analysis
-1. Include relevant code and documentation in the markdown file
-2. Structure the markdown file logically with clear sections
-3. Ask specific questions about the provided codebase
-4. Use the same conversation ID for related questions about the same application
-
-### For General Queries
-1. Ask clear, specific questions
-2. Provide necessary context in the question itself
-3. Use conversation ID to maintain context in related questions
+### Rate Limits
+- Maximum file size: 5MB
+- Maximum context: 10 messages
+- Maximum output tokens: 1500
 
 ## Error Handling
 
-### Common HTTP Status Codes
-- 200: Successful response
-- 400: Bad request (invalid input)
-- 401: Unauthorized (invalid API key)
-- 413: File too large (>5MB)
-- 415: Unsupported file type (non-markdown)
-- 500: Server error
+### HTTP Status Codes
+- 200: Success
+- 400: Bad Request
+- 401: Unauthorized
+- 413: File Too Large
+- 415: Invalid File Type
+- 500: Server Error
 
 ### Error Response Format
 ```json
@@ -164,12 +164,28 @@ Public endpoint to complete authentication and receive API key.
 }
 ```
 
+## Best Practices
+
+### Application Analysis
+1. Structure markdown files logically
+2. Include relevant code snippets
+3. Add context and documentation
+4. Use consistent conversation IDs
+5. Clean file uploads regularly
+
+### General Queries
+1. Provide clear context
+2. Use conversation IDs for related queries
+3. Monitor token usage
+4. Handle errors gracefully
+5. Implement request retries
+
 ## Deployment
 
 ### Environment Variables
-```
+```bash
 ANTHROPIC_API_KEY=your_anthropic_api_key
-API_KEY=your_api_key
+MASTER_KEY=your_master_key
 BASE_RPC_URL=your_base_chain_rpc_url
 BASE_TOKEN_ADDRESS=your_token_contract_address
 ```
@@ -177,7 +193,16 @@ BASE_TOKEN_ADDRESS=your_token_contract_address
 ### Server Requirements
 - Node.js 16+
 - pnpm package manager
-- PM2 for production deployment
+- PM2 for production
+- 1GB RAM minimum
+- 10GB storage minimum
+
+### Security Requirements
+- Enable HTTPS
+- Set secure CORS policies
+- Rate limit by IP
+- Monitor API key usage
+- Regular security audits
 
 ### Update Process
 ```bash
@@ -185,11 +210,66 @@ git pull origin main
 pnpm i
 pnpm build
 pm2 restart fatou
+pm2 logs
 ```
 
-## Support and Contact
+## API Versioning
 
-For support, contact the maintainer through:
+Current version: v1
+- All endpoints prefixed with /v1
+- Breaking changes trigger version increment
+- Maintain backward compatibility
+- Version sunset schedule: 6 months notice
+
+## Monitoring
+
+### Metrics to Track
+- Request volume
+- Response times
+- Error rates
+- Token usage
+- API key usage
+- File upload sizes
+- Conversation lengths
+
+### Health Checks
+- Endpoint: /health
+- Checks: Database, Claude API, Token contract
+- Response format includes component status
+
+## Development
+
+### Local Setup
+```bash
+# Clone repository
+git clone https://github.com/yourusername/fatou.git
+
+# Install dependencies
+pnpm i
+
+# Configure environment
+cp .env.template .env
+# Edit .env with your values
+
+# Start development server
+pnpm start:dev
+```
+
+### Testing
+```bash
+# Unit tests
+pnpm test
+
+# E2E tests
+pnpm test:e2e
+
+# Coverage
+pnpm test:cov
+```
+
+## Support
+
+Contact the maintainer:
 - Element: @julienbrg:matrix.org
 - Farcaster: julien-
 - Telegram: @julienbrg
@@ -197,6 +277,6 @@ For support, contact the maintainer through:
 - Discord: julienbrg
 - LinkedIn: julienberanger
 
-## Swagger Documentation
+## API Reference
 
-Interactive API documentation is available at `/api` when running the server.
+Interactive Swagger documentation available at `/api` endpoint.

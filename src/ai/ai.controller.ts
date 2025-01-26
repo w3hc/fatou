@@ -15,7 +15,6 @@ import {
   ApiResponse,
   ApiConsumes,
   ApiBody,
-  ApiSecurity,
   ApiHeader,
 } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
@@ -26,7 +25,6 @@ import { ClaudeResponse } from '../common/types';
 
 @ApiTags('AI')
 @Controller('ai')
-@ApiSecurity('api-key')
 export class AiController {
   private readonly logger = new Logger(AiController.name);
 
@@ -67,7 +65,7 @@ export class AiController {
       'Use conversationId to continue an existing conversation in either mode.',
   })
   @ApiHeader({
-    name: 'x-api-key',
+    name: 'api-key',
     description: 'API key for authentication',
     required: true,
     example: 'your-api-key-here',

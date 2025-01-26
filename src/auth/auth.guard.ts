@@ -7,33 +7,41 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import { Observable } from 'rxjs';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { ApiKeysService } from '../api-keys/api-keys.service';
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
   constructor(
     private readonly configService: ConfigService,
     private readonly reflector: Reflector,
+    private readonly apiKeysService: ApiKeysService,
   ) {}
 
-  canActivate(
-    context: ExecutionContext,
-  ): boolean | Promise<boolean> | Observable<boolean> {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
-    if (isPublic) {
+    if (isPublic) return true;
+
+    const request = context.switchToHttp().getRequest<Request>();
+    const apiKey = request.header('api-key');
+    const masterKey = this.configService.get<string>('MASTER_KEY');
+
+    if (!apiKey) {
+      throw new UnauthorizedException('API key is required');
+    }
+
+    // Check master key first
+    if (apiKey === masterKey) {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<Request>();
-    const apiKey = request.header('x-api-key');
-    const validApiKey = this.configService.get<string>('API_KEY');
-
-    if (!apiKey || !validApiKey || apiKey !== validApiKey) {
+    // Validate against registered API keys
+    const isValidApiKey = await this.apiKeysService.validateApiKey(apiKey);
+    if (!isValidApiKey) {
       throw new UnauthorizedException('Invalid API key');
     }
 

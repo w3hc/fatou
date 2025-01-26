@@ -6,6 +6,8 @@ App description files can be generated using [Zhankai](https://github.com/w3hc/z
 
 Fatou is also used by [ask-my-assistant](https://github.com/julienbrg/ask-my-assistant) UI (view [live demo](https://ask-my-assistant.netlify.app/)). 
 
+Tech docs is available here.
+
 ## Installation
 
 ```bash
