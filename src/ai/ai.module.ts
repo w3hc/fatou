@@ -5,11 +5,14 @@ import { diskStorage } from 'multer';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { DatabaseModule } from '../database/database.module';
+import { ApiKeysModule } from '../api-keys/api-keys.module';
 
 @Module({
   imports: [
     ConfigModule,
     DatabaseModule,
+    ApiKeysModule,
+
     MulterModule.register({
       storage: diskStorage({
         destination: './uploads',

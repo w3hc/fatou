@@ -88,4 +88,12 @@ export class ApiKeysService implements OnModuleInit {
       .filter((key) => key.walletAddress === walletAddress)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
+
+  async findApiKey(key: string): Promise<ApiKey | null> {
+    const apiKey = this.apiKeys[key];
+    if (!apiKey || !apiKey.isActive) {
+      return null;
+    }
+    return apiKey;
+  }
 }

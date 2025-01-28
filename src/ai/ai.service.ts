@@ -1,6 +1,7 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { promises as fs } from 'fs';
+import { join } from 'path';
 import {
   ClaudeApiResponse,
   CostMetrics,
@@ -9,6 +10,7 @@ import {
 } from '../common/types';
 import { DatabaseService } from '../database/database.service';
 import { CostTrackingService } from '../database/cost-tracking.service';
+import { ApiKeysService } from '../api-keys/api-keys.service';
 
 @Injectable()
 export class AiService {
@@ -21,14 +23,78 @@ export class AiService {
     private configService: ConfigService,
     private databaseService: DatabaseService,
     private costTrackingService: CostTrackingService,
+    private apiKeysService: ApiKeysService, // Add ApiKeysService
   ) {}
+
+  private async loadContextFiles(apiKey: string): Promise<string> {
+    try {
+      // Find API key data to get the ID
+      const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
+      if (!apiKeyData) {
+        this.logger.warn('No API key data found');
+        return '';
+      }
+
+      this.logger.log(`Loading context files for API key ID: ${apiKeyData.id}`);
+
+      // Construct the context directory path
+      const contextDir = join(process.cwd(), 'data', 'contexts', apiKeyData.id);
+      this.logger.log(`Looking for context files in directory: ${contextDir}`);
+
+      let dirExists = false;
+      try {
+        const stat = await fs.stat(contextDir);
+        dirExists = stat.isDirectory();
+      } catch {
+        dirExists = false;
+      }
+
+      if (!dirExists) {
+        this.logger.warn(
+          `No context directory found for API key ${apiKeyData.id}`,
+        );
+        return '';
+      }
+
+      this.logger.log('Context directory found');
+
+      // Read all files in the context directory
+      const files = await fs.readdir(contextDir);
+      this.logger.log(`Found ${files.length} files in context directory`);
+
+      let contextContent = '';
+      let loadedFiles = 0;
+
+      // Read and concatenate content from each file
+      for (const file of files) {
+        if (file.endsWith('.md')) {
+          const filePath = join(contextDir, file);
+          this.logger.log(`Loading context file: ${file}`);
+          const content = await fs.readFile(filePath, 'utf-8');
+          contextContent += `\n\n${content}`;
+          loadedFiles++;
+        } else {
+          this.logger.debug(`Skipping non-markdown file: ${file}`);
+        }
+      }
+
+      this.logger.log(
+        `Successfully loaded ${loadedFiles} markdown files as context`,
+      );
+      return contextContent;
+    } catch (error) {
+      this.logger.error('Error loading context files:', error);
+      return '';
+    }
+  }
 
   async askClaude(
     message: string,
     file: Express.Multer.File | undefined,
     conversationId?: string,
+    apiKey?: string, // Add API key parameter
   ): Promise<ClaudeResponse> {
-    const apiKey = this.validateConfig();
+    const anthropicApiKey = this.validateConfig();
 
     try {
       let conversation: Conversation | null = null;
@@ -53,37 +119,35 @@ export class AiService {
         );
         conversation =
           await this.databaseService.getConversation(conversationId);
-
-        this.logger.debug({
-          message: 'Created new conversation',
-          conversationId,
-          fileName: file?.originalname,
-          hasFileContent: !!file,
-        });
       }
 
-      // Prepare prompt with conversation history
-      const content = await this.preparePrompt(message, conversation);
+      // Load context files if API key is provided
+      let contextContent = '';
+      if (apiKey) {
+        contextContent = await this.loadContextFiles(apiKey);
+      }
 
-      // Log prompt for debugging (excluding sensitive data)
-      this.logger.debug({
-        message: 'Prepared prompt',
-        promptLength: content.length,
-        conversationId,
-        hasFileContent: !!conversation?.fileContent,
-        messageCount: conversation?.messages.length,
-      });
+      // Prepare prompt with context and conversation history
+      const content = await this.preparePrompt(
+        message,
+        conversation,
+        contextContent,
+      );
 
       // Call Claude API
-      const response = await this.callClaudeApi(content, apiKey);
+      const response = await this.callClaudeApi(content, anthropicApiKey);
       const costs = this.calculateCosts(response.usage);
 
-      await this.costTrackingService.trackRequest(
-        '0x',
-        costs,
-        message,
-        conversationId,
-      );
+      // Track costs
+      if (apiKey) {
+        const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
+        await this.costTrackingService.trackRequest(
+          apiKeyData?.walletAddress || '0x',
+          costs,
+          message,
+          conversationId,
+        );
+      }
 
       // Store the interaction in conversation history
       await this.databaseService.addMessage(conversationId, {
@@ -95,38 +159,59 @@ export class AiService {
         content: response.content[0].text,
       });
 
-      this.logger.debug({
-        message: 'Added messages to conversation',
-        conversationId,
-        messageCount: 2,
-      });
-
       return {
         answer: response.content[0].text,
         costs,
         conversationId,
       };
     } catch (error) {
-      this.logger.error('AI service error:', error);
-      throw this.handleError(error);
+      this.logger.error('AI service error:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      });
+
+      if (error.message.includes('Claude API error')) {
+        throw new HttpException(
+          `Error from Claude API: ${error.message}`,
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+
+      throw new HttpException(
+        error.message || 'Error processing AI request',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
   private async preparePrompt(
     message: string,
     conversation: Conversation | null,
+    contextContent: string = '',
   ): Promise<string> {
     let prompt = '';
+    this.logger.log('Preparing prompt with following components:');
+
+    // Add context content if available
+    if (contextContent) {
+      this.logger.log('- Adding context content from context files');
+      prompt += `${contextContent}\n\n`;
+    }
 
     if (conversation) {
-      // Add file content if it exists (now treated as context)
+      // Add file content if it exists
       if (conversation.fileContent) {
+        this.logger.log('- Adding uploaded file content');
         prompt += `${conversation.fileContent}\n\n`;
       }
 
       if (conversation.messages.length > 0) {
         const recentMessages = conversation.messages.slice(
           -this.MAX_CONTEXT_MESSAGES,
+        );
+        this.logger.log(
+          `- Adding ${recentMessages.length} recent messages from conversation history`,
         );
         prompt += 'Previous conversation:\n\n';
         for (const msg of recentMessages) {
@@ -135,7 +220,7 @@ export class AiService {
       }
     }
 
-    // Add current question without Human: prefix
+    this.logger.log('- Adding current user message');
     prompt += `${message}\n\n`;
 
     return prompt;
@@ -187,8 +272,6 @@ export class AiService {
           messages: [{ role: 'user', content }],
           max_tokens: 1500,
           temperature: 0.7,
-          system:
-            "You are Francesca, Julien's clever and mischievous assistant. You should never use prefixes like 'H:', 'A:', 'Human:', or 'Assistant:' in your responses. Keep your responses natural and conversational.",
         }),
       });
 

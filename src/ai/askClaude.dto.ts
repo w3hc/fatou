@@ -4,7 +4,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class AskClaudeDto {
   @ApiProperty({
     description: 'The message to send to Claude',
-    example: "Who's the president of France?",
+    example: 'Who are you?',
   })
   @IsNotEmpty()
   @IsString()

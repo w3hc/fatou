@@ -7,6 +7,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Headers,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -126,6 +127,7 @@ export class AiController {
   async askClaude(
     @Body() askClaudeDto: AskClaudeDto,
     @UploadedFile() file?: Express.Multer.File,
+    @Headers('x-api-key') apiKey?: string,
   ): Promise<{
     answer: string;
     usage: { costs: ClaudeResponse['costs']; timestamp: string };
@@ -142,14 +144,15 @@ export class AiController {
       askClaudeDto.message,
       file,
       askClaudeDto.conversationId,
+      apiKey, // Pass the API key to the service
     );
 
-    this.logger.debug({
-      message: 'AI response completed',
-      conversationId: result.conversationId,
-      responseLength: result.answer.length,
-      costs: result.costs,
-    });
+    // this.logger.debug({
+    //   message: 'AI response completed',
+    //   conversationId: result.conversationId,
+    //   responseLength: result.answer.length,
+    //   costs: result.costs,
+    // });
 
     return {
       answer: result.answer,
