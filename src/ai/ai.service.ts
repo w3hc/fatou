@@ -41,16 +41,22 @@ export class AiService {
       const contextDir = join(process.cwd(), 'data', 'contexts', apiKeyData.id);
       this.logger.log(`Looking for context files in directory: ${contextDir}`);
 
+      let dirExists = false;
       try {
-        // Check if directory exists
-        await fs.access(contextDir);
-        this.logger.log('Context directory found');
+        const stat = await fs.stat(contextDir);
+        dirExists = stat.isDirectory();
       } catch {
+        dirExists = false;
+      }
+
+      if (!dirExists) {
         this.logger.warn(
           `No context directory found for API key ${apiKeyData.id}`,
         );
         return '';
       }
+
+      this.logger.log('Context directory found');
 
       // Read all files in the context directory
       const files = await fs.readdir(contextDir);
@@ -159,8 +165,23 @@ export class AiService {
         conversationId,
       };
     } catch (error) {
-      this.logger.error('AI service error:', error);
-      throw this.handleError(error);
+      this.logger.error('AI service error:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      });
+
+      if (error.message.includes('Claude API error')) {
+        throw new HttpException(
+          `Error from Claude API: ${error.message}`,
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+
+      throw new HttpException(
+        error.message || 'Error processing AI request',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -251,8 +272,6 @@ export class AiService {
           messages: [{ role: 'user', content }],
           max_tokens: 1500,
           temperature: 0.7,
-          system:
-            "You are Francesca, Julien's clever and mischievous assistant. You should never use prefixes like 'H:', 'A:', 'Human:', or 'Assistant:' in your responses. Keep your responses natural and conversational.",
         }),
       });
 
