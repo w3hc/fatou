@@ -7,6 +7,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Delete,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -57,6 +58,16 @@ class UploadContextFileDto {
     description: 'Markdown file to upload as context',
   })
   file: any;
+}
+
+class DeleteContextFileDto {
+  @ApiProperty({
+    description: 'Name of the file to delete',
+    example: 'context.md',
+  })
+  @IsString()
+  @IsNotEmpty()
+  filename: string;
 }
 
 @ApiTags('API Keys')
@@ -199,6 +210,60 @@ export class ContextFilesController {
     } catch (error) {
       throw new BadRequestException(
         'Failed to save context file: ' + error.message,
+      );
+    }
+  }
+
+  @Delete('delete-context')
+  @ApiOperation({
+    summary: 'Delete context file',
+    description: 'Delete a specific markdown file from the context directory',
+  })
+  @ApiHeader({
+    name: 'x-api-key',
+    description: 'API key for authentication',
+    required: true,
+  })
+  async deleteContext(
+    @Headers('x-api-key') apiKey: string,
+    @Body() deleteFileDto: DeleteContextFileDto,
+  ) {
+    // Validate API key and get API key data
+    const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
+    if (!apiKeyData) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    try {
+      // Construct the path to the file
+      const filePath = join(
+        process.cwd(),
+        'data',
+        'contexts',
+        apiKeyData.id,
+        deleteFileDto.filename,
+      );
+
+      // Check if file exists
+      try {
+        await fs.access(filePath);
+      } catch (error) {
+        throw new BadRequestException('File not found');
+      }
+
+      // Delete the file
+      await fs.unlink(filePath);
+
+      return {
+        message: 'Context file deleted successfully',
+        filename: deleteFileDto.filename,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        'Failed to delete context file: ' + error.message,
       );
     }
   }
