@@ -24,6 +24,8 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { ApiKeysService } from './api-keys.service';
 import { diskStorage } from 'multer';
+import { StreamableFile } from '@nestjs/common';
+import { createReadStream } from 'fs';
 
 // DTO for the request body
 export class ListFilesDto {
@@ -63,6 +65,16 @@ class UploadContextFileDto {
 class DeleteContextFileDto {
   @ApiProperty({
     description: 'Name of the file to delete',
+    example: 'context.md',
+  })
+  @IsString()
+  @IsNotEmpty()
+  filename: string;
+}
+
+export class DownloadContextFileDto {
+  @ApiProperty({
+    description: 'Name of the file to download',
     example: 'context.md',
   })
   @IsString()
@@ -264,6 +276,77 @@ export class ContextFilesController {
       }
       throw new BadRequestException(
         'Failed to delete context file: ' + error.message,
+      );
+    }
+  }
+
+  @Post('download-context')
+  @ApiOperation({
+    summary: 'Download context file',
+    description: 'Download a specific markdown file from the context directory',
+  })
+  @ApiHeader({
+    name: 'x-api-key',
+    description: 'API key for authentication',
+    required: true,
+  })
+  @ApiBody({ type: DownloadContextFileDto })
+  @ApiResponse({
+    status: 200,
+    description: 'File downloaded successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'File not found or invalid request',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid API key',
+  })
+  async downloadContext(
+    @Headers('x-api-key') apiKey: string,
+    @Body() downloadFileDto: DownloadContextFileDto,
+  ): Promise<StreamableFile> {
+    // Validate API key and get API key data
+    const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
+    if (!apiKeyData) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    try {
+      // Construct the path to the file
+      const filePath = join(
+        process.cwd(),
+        'data',
+        'contexts',
+        apiKeyData.id,
+        downloadFileDto.filename,
+      );
+
+      // Check if file exists
+      try {
+        await fs.access(filePath);
+      } catch (error) {
+        throw new BadRequestException('File not found');
+      }
+
+      // Create a read stream from the file
+      const file = createReadStream(filePath);
+
+      // Return the streamable file with appropriate headers
+      return new StreamableFile(file, {
+        disposition: `attachment; filename="${downloadFileDto.filename}"`,
+        type: 'text/markdown',
+      });
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException(
+        'Failed to download context file: ' + error.message,
       );
     }
   }
