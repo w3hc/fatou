@@ -12,14 +12,16 @@ Fatou is a Nest.js-based API that provides an interface to Claude, an advanced l
 ### API Key Types
 
 1. **Master Key**
-   - Full administrative access
+   - Full administrative access to all endpoints
    - Set via `MASTER_KEY` environment variable
-   - Required for administrative endpoints
+   - Required for managing API keys and administrative functions
+   - Example usage: Creating/revoking user API keys
 
 2. **User API Keys**
    - Generated after token verification
-   - Limited to AI interaction endpoints
+   - Limited to AI interaction endpoints and context management
    - Automatically tracked for usage and billing
+   - Each key has its own isolated context directory
 
 ### Obtaining an API Key
 
@@ -31,6 +33,93 @@ Fatou is a Nest.js-based API that provides an interface to Claude, an advanced l
 ### Authentication Headers
 ```http
 x-api-key: your-api-key-here
+```
+
+## Context Management
+
+### Context Directory Structure
+- Each API key has a dedicated context directory
+- Located at `data/contexts/<api-key-id>/`
+- Created automatically when API key is generated
+- Supports multiple markdown files per API key
+
+### Managing Context Files
+
+#### Upload Context File
+```http
+POST /context-files/add-context
+Content-Type: multipart/form-data
+x-api-key: your-api-key-here
+
+Form Data:
+- file: .md file (required)
+```
+
+**Notes:**
+- Only markdown (.md) files are accepted
+- 5MB file size limit
+- Duplicate filenames will replace existing files
+- Returns upload status and replacement information
+
+#### Download Context File
+```http
+POST /context-files/download-context
+Content-Type: application/json
+x-api-key: your-api-key-here
+
+{
+  "filename": "context.md"
+}
+```
+
+**Notes:**
+- Returns file as downloadable attachment
+- Content-Type: text/markdown
+- Returns 404 if file not found
+
+#### Delete Context File
+```http
+DELETE /context-files/delete-context
+Content-Type: application/json
+x-api-key: your-api-key-here
+
+{
+  "filename": "context.md"
+}
+```
+
+#### List Context Files
+```http
+POST /context-files/list-files
+Content-Type: application/json
+x-api-key: your-api-key-here
+
+{
+  "id": "api-key-id"
+}
+```
+
+## API Key Management
+
+### Create API Key (Admin Only)
+```http
+POST /api-keys
+x-api-key: master-key-here
+
+{
+  "walletAddress": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+}
+```
+
+### Revoke API Key (Admin Only)
+```http
+DELETE /api-keys/:key
+x-api-key: master-key-here
+```
+
+### List API Keys for Wallet
+```http
+GET /api-keys/wallet/:address
 ```
 
 ## Core Endpoints
@@ -77,60 +166,63 @@ Form Data:
 }
 ```
 
-### Authentication Flow
+## Storage Structure
 
-#### POST /auth/get-message
+### Main Directories
+```
+data/
+├── contexts/             # Context files for each API key
+│   ├── <api-key-id-1>/  # Isolated context directory
+│   │   ├── context1.md
+│   │   └── context2.md
+│   └── <api-key-id-2>/
+├── api-keys.json        # API key database
+├── costs.json          # Usage tracking
+└── db.json            # Conversation history
 
-**Request**
+uploads/               # Temporary upload directory
+```
+
+### Data Files
+
+#### api-keys.json
 ```json
 {
-  "walletAddress": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+  "<api-key>": {
+    "id": "unique-id",
+    "key": "api-key",
+    "walletAddress": "0x...",
+    "createdAt": "ISO-date",
+    "lastUsedAt": "ISO-date",
+    "isActive": true
+  }
 }
 ```
 
-**Response**
+#### costs.json
 ```json
 {
-  "message": "zhankai_auth_0x742d...4438f44e_1729772340442_caa3334b-2dec-4f4e-8aa4-0415f2eb3e71"
+  "users": {
+    "<wallet-address>": {
+      "totalCosts": {
+        "inputCost": 0.015,
+        "outputCost": 0.075,
+        "totalCost": 0.090,
+        "inputTokens": 1000,
+        "outputTokens": 1000
+      },
+      "requests": [...]
+    }
+  },
+  "global": {
+    "totalInputCost": 0.015,
+    "totalOutputCost": 0.075,
+    "totalCost": 0.090,
+    "totalRequests": 1,
+    "lastUpdated": "ISO-date"
+  }
 }
 ```
-
-#### POST /auth/verify
-
-**Request**
-```json
-{
-  "walletAddress": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-  "message": "zhankai_auth_0x742d..._1729772340442_caa3334b-2dec-4f4e-8aa4-0415f2eb3e71",
-  "signature": "0x123...abc"
-}
-```
-
-**Response**
-```json
-{
-  "apiKey": "your-api-key"
-}
-```
-
-## Conversation Management
-
-### Context Persistence
-- Conversations tracked via `conversationId`
-- Maximum context: 10 previous messages
-- File context persists throughout conversation
-- Each new file upload creates new conversation
-
-### Storage
-- Files: `uploads/` directory
-- Conversations: `data/db.json`
-- API Keys: `data/api-keys.json`
-- Costs: `data/costs.json`
-
-### Cleanup
-- Implement regular cleanup for uploaded files
-- Archive old conversations periodically
-- Monitor storage usage
 
 ## Rate Limiting & Costs
 
@@ -149,8 +241,10 @@ Form Data:
 
 ### HTTP Status Codes
 - 200: Success
-- 400: Bad Request
-- 401: Unauthorized
+- 400: Bad Request (invalid input)
+- 401: Unauthorized (invalid API key)
+- 403: Forbidden (insufficient permissions)
+- 404: Not Found (resource doesn't exist)
 - 413: File Too Large
 - 415: Invalid File Type
 - 500: Server Error
@@ -164,47 +258,30 @@ Form Data:
 }
 ```
 
-## Best Practices
+## Development
 
-### Application Analysis
-1. Structure markdown files logically
-2. Include relevant code snippets
-3. Add context and documentation
-4. Use consistent conversation IDs
-5. Clean file uploads regularly
-
-### General Queries
-1. Provide clear context
-2. Use conversation IDs for related queries
-3. Monitor token usage
-4. Handle errors gracefully
-5. Implement request retries
-
-## Deployment
-
-### Environment Variables
+### Environment Setup
 ```bash
+# Required environment variables
 ANTHROPIC_API_KEY=your_anthropic_api_key
 MASTER_KEY=your_master_key
 BASE_RPC_URL=your_base_chain_rpc_url
 BASE_TOKEN_ADDRESS=your_token_contract_address
 ```
 
-### Server Requirements
-- Node.js 16+
-- pnpm package manager
-- PM2 for production
-- 1GB RAM minimum
-- 10GB storage minimum
+### Local Development
+```bash
+# Install dependencies
+pnpm i
 
-### Security Requirements
-- Enable HTTPS
-- Set secure CORS policies
-- Rate limit by IP
-- Monitor API key usage
-- Regular security audits
+# Start development server
+pnpm start:dev
 
-### Update Process
+# Run tests
+pnpm test
+```
+
+### Deployment
 ```bash
 git pull origin main
 pnpm i
@@ -213,59 +290,25 @@ pm2 restart fatou
 pm2 logs
 ```
 
-## API Versioning
+## Security Best Practices
 
-Current version: v1
-- All endpoints prefixed with /v1
-- Breaking changes trigger version increment
-- Maintain backward compatibility
-- Version sunset schedule: 6 months notice
+1. API Key Management
+   - Rotate API keys regularly
+   - Never share or expose the MASTER_KEY
+   - Monitor API key usage for suspicious activity
+   - Revoke unused or compromised keys immediately
 
-## Monitoring
+2. File Security
+   - Validate all file uploads
+   - Enforce file size and type restrictions
+   - Clean up temporary files
+   - Regular security audits of stored files
 
-### Metrics to Track
-- Request volume
-- Response times
-- Error rates
-- Token usage
-- API key usage
-- File upload sizes
-- Conversation lengths
-
-### Health Checks
-- Endpoint: /health
-- Checks: Database, Claude API, Token contract
-- Response format includes component status
-
-## Development
-
-### Local Setup
-```bash
-# Clone repository
-git clone https://github.com/yourusername/fatou.git
-
-# Install dependencies
-pnpm i
-
-# Configure environment
-cp .env.template .env
-# Edit .env with your values
-
-# Start development server
-pnpm start:dev
-```
-
-### Testing
-```bash
-# Unit tests
-pnpm test
-
-# E2E tests
-pnpm test:e2e
-
-# Coverage
-pnpm test:cov
-```
+3. Access Control
+   - Use HTTPS in production
+   - Implement proper CORS policies
+   - Rate limit by IP and API key
+   - Regular security audits
 
 ## Support
 
