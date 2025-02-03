@@ -4,18 +4,25 @@ import {
   Body,
   UnauthorizedException,
   Headers,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiHeader,
   ApiResponse,
   ApiProperty,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import { IsString, IsNotEmpty } from 'class-validator';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { ApiKeysService } from './api-keys.service';
+import { diskStorage } from 'multer';
 
 // DTO for the request body
 export class ListFilesDto {
@@ -41,6 +48,15 @@ export class ListFilesResponseDto {
     example: ['context1.md', 'context2.md'],
   })
   files: string[];
+}
+
+class UploadContextFileDto {
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    description: 'Markdown file to upload as context',
+  })
+  file: any;
 }
 
 @ApiTags('API Keys')
@@ -108,6 +124,82 @@ export class ContextFilesController {
 
       // For any other error, rethrow it
       throw error;
+    }
+  }
+  @Post('add-context')
+  @ApiOperation({
+    summary: 'Upload context file',
+    description: 'Upload a markdown file to be used as context for the API key',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Markdown file to upload as context',
+    type: UploadContextFileDto,
+  })
+  @ApiHeader({
+    name: 'x-api-key',
+    description: 'API key for authentication',
+    required: true,
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `${uniqueSuffix}-${file.originalname}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (file && !file.originalname.toLowerCase().endsWith('.md')) {
+          cb(
+            new BadRequestException('Only markdown (.md) files are allowed'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB limit
+      },
+    }),
+  )
+  async addContext(
+    @Headers('x-api-key') apiKey: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    // Validate API key and get API key data
+    const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
+    if (!apiKeyData) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    try {
+      // Construct the path to the context directory for this API key
+      const contextDir = join(process.cwd(), 'data', 'contexts', apiKeyData.id);
+
+      // Ensure the directory exists
+      await fs.mkdir(contextDir, { recursive: true });
+
+      // Copy file from uploads to context directory
+      const contextFilePath = join(contextDir, file.originalname);
+      await fs.copyFile(file.path, contextFilePath);
+
+      // Clean up the uploaded file
+      await fs.unlink(file.path);
+
+      return {
+        message: 'Context file uploaded successfully',
+        filename: file.originalname,
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        'Failed to save context file: ' + error.message,
+      );
     }
   }
 }
