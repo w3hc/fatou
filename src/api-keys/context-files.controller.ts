@@ -149,10 +149,12 @@ export class ContextFilesController {
       throw error;
     }
   }
+
   @Post('add-context')
   @ApiOperation({
     summary: 'Upload context file',
-    description: 'Upload a markdown file to be used as context for the API key',
+    description:
+      'Upload a markdown file to be used as context for the API key. If a file with the same name exists, it will be replaced.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -163,6 +165,18 @@ export class ContextFilesController {
     name: 'x-api-key',
     description: 'API key for authentication',
     required: true,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Context file uploaded successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        filename: { type: 'string' },
+        replaced: { type: 'boolean' },
+      },
+    },
   })
   @UseInterceptors(
     FileInterceptor('file', {
@@ -208,18 +222,44 @@ export class ContextFilesController {
       // Ensure the directory exists
       await fs.mkdir(contextDir, { recursive: true });
 
-      // Copy file from uploads to context directory
+      // Check if file already exists
       const contextFilePath = join(contextDir, file.originalname);
+      let fileExists = false;
+      try {
+        await fs.access(contextFilePath);
+        fileExists = true;
+      } catch {
+        fileExists = false;
+      }
+
+      // If file exists, remove it first
+      if (fileExists) {
+        await fs.unlink(contextFilePath);
+      }
+
+      // Copy new file from uploads to context directory
       await fs.copyFile(file.path, contextFilePath);
 
-      // Clean up the uploaded file
+      // Clean up the uploaded file from the uploads directory
       await fs.unlink(file.path);
 
       return {
-        message: 'Context file uploaded successfully',
+        message: fileExists
+          ? 'Context file updated successfully'
+          : 'Context file uploaded successfully',
         filename: file.originalname,
+        replaced: fileExists,
       };
     } catch (error) {
+      // Clean up uploaded file in case of error
+      if (file?.path) {
+        try {
+          await fs.unlink(file.path);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+
       throw new BadRequestException(
         'Failed to save context file: ' + error.message,
       );
