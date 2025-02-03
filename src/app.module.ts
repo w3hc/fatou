@@ -7,11 +7,15 @@ import { AuthModule } from './auth/auth.module';
 import { Web3Module } from './web3/web3.module';
 import { DatabaseModule } from './database/database.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { MulterModule } from '@nestjs/platform-express';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    MulterModule.register({
+      dest: './uploads',
     }),
     AiModule,
     AuthModule,

@@ -40,8 +40,9 @@ export class ApiKeysService implements OnModuleInit {
 
   async createApiKey(walletAddress: string): Promise<ApiKey> {
     const key = this.generateApiKey();
+    const id = uuidv4();
     const apiKey: ApiKey = {
-      id: uuidv4(),
+      id,
       key,
       walletAddress,
       createdAt: new Date().toISOString(),
@@ -51,7 +52,20 @@ export class ApiKeysService implements OnModuleInit {
 
     this.apiKeys[key] = apiKey;
     await this.saveData();
-    this.logger.debug(`Created new key: ${key}`);
+
+    // Create contexts directory for the new API key
+    const contextDir = join(process.cwd(), 'data', 'contexts', id);
+    try {
+      await fs.mkdir(contextDir, { recursive: true });
+      this.logger.debug(`Created context directory for API key: ${id}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to create context directory for API key: ${id}`,
+        error,
+      );
+      // Don't throw the error as the API key creation was successful
+    }
+
     return apiKey;
   }
 
