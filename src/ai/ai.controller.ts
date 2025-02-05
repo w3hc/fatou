@@ -138,21 +138,16 @@ export class AiController {
       questionText: askClaudeDto.message,
       conversationId: askClaudeDto.conversationId,
       fileName: file?.originalname,
+      walletAddress: askClaudeDto.walletAddress,
     });
 
     const result = await this.aiService.askClaude(
       askClaudeDto.message,
       file,
       askClaudeDto.conversationId,
-      apiKey, // Pass the API key to the service
+      apiKey,
+      askClaudeDto.walletAddress,
     );
-
-    // this.logger.debug({
-    //   message: 'AI response completed',
-    //   conversationId: result.conversationId,
-    //   responseLength: result.answer.length,
-    //   costs: result.costs,
-    // });
 
     return {
       answer: result.answer,

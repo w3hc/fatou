@@ -1,4 +1,9 @@
-import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsEthereumAddress,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AskClaudeDto {
@@ -28,4 +33,13 @@ export class AskClaudeDto {
   @IsOptional()
   @IsString()
   conversationId?: string;
+
+  @ApiProperty({
+    description: 'Ethereum wallet address',
+    required: false,
+    example: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+  })
+  @IsOptional()
+  @IsEthereumAddress()
+  walletAddress?: string;
 }

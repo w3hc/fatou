@@ -2,6 +2,7 @@ import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { ethers } from 'ethers';
 import {
   ClaudeApiResponse,
   CostMetrics,
@@ -12,19 +13,49 @@ import { DatabaseService } from '../database/database.service';
 import { CostTrackingService } from '../database/cost-tracking.service';
 import { ApiKeysService } from '../api-keys/api-keys.service';
 
+// Basic ERC20Votes ABI for minting
+const OUF_TOKEN_ABI = [
+  'function mint(address to, uint256 amount)',
+  'function owner() view returns (address)',
+  'function decimals() view returns (uint8)',
+];
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly INPUT_COST_PER_1K = 0.015;
   private readonly OUTPUT_COST_PER_1K = 0.075;
   private readonly MAX_CONTEXT_MESSAGES = 10;
+  private provider: ethers.JsonRpcProvider;
+  private tokenContract: ethers.Contract;
+  private signer: ethers.Wallet;
 
   constructor(
     private configService: ConfigService,
     private databaseService: DatabaseService,
     private costTrackingService: CostTrackingService,
-    private apiKeysService: ApiKeysService, // Add ApiKeysService
-  ) {}
+    private apiKeysService: ApiKeysService,
+  ) {
+    // Initialize Web3 provider and contract
+    const rpcUrl = this.configService.get<string>('ARBITRUM_RPC_URL');
+    const privateKey = this.configService.get<string>('PRIVATE_KEY');
+    const tokenAddress = this.configService.get<string>('OUF_TOKEN_ADDRESS');
+
+    if (rpcUrl && privateKey && tokenAddress) {
+      this.provider = new ethers.JsonRpcProvider(rpcUrl);
+      this.signer = new ethers.Wallet(privateKey, this.provider);
+      this.tokenContract = new ethers.Contract(
+        tokenAddress,
+        OUF_TOKEN_ABI,
+        this.signer,
+      );
+      this.logger.log('Web3 provider and token contract initialized');
+    } else {
+      this.logger.warn(
+        'Missing Web3 configuration. Token minting will be disabled.',
+      );
+    }
+  }
 
   private async loadContextFiles(apiKey: string): Promise<string> {
     try {
@@ -88,13 +119,48 @@ export class AiService {
     }
   }
 
+  private async mintTokens(to: string, cost: number): Promise<void> {
+    try {
+      if (!this.tokenContract || !this.signer) {
+        throw new Error('Token contract not initialized');
+      }
+
+      // Get token decimals
+      const decimals = await this.tokenContract.decimals();
+
+      // Convert cost to token amount (1:1 ratio with cost)
+      const tokenAmount = ethers.parseUnits(cost.toString(), decimals);
+
+      // Verify owner
+      const owner = await this.tokenContract.owner();
+      if (owner.toLowerCase() !== this.signer.address.toLowerCase()) {
+        throw new Error('Signer is not the token owner');
+      }
+
+      // Mint tokens
+      const tx = await this.tokenContract.mint(to, tokenAmount);
+      this.logger.debug(`Transaction hash: ${tx.hash}`);
+      await tx.wait();
+
+      this.logger.log(`Successfully minted ${cost} OUF tokens to ${to}`);
+    } catch (error) {
+      this.logger.error('Error minting tokens:', error);
+      throw new Error(`Failed to mint tokens: ${error.message}`);
+    }
+  }
+
   async askClaude(
     message: string,
     file: Express.Multer.File | undefined,
     conversationId?: string,
-    apiKey?: string, // Add API key parameter
+    apiKey?: string,
+    walletAddress?: string,
   ): Promise<ClaudeResponse> {
     const anthropicApiKey = this.validateConfig();
+
+    if (walletAddress) {
+      this.logger.log('Wallet address for token minting:', walletAddress);
+    }
 
     try {
       let conversation: Conversation | null = null;
@@ -147,6 +213,17 @@ export class AiService {
           message,
           conversationId,
         );
+      }
+
+      // Mint tokens if wallet address is provided
+      this.logger.debug('walletAddress:', walletAddress);
+      if (walletAddress) {
+        try {
+          await this.mintTokens(walletAddress, costs.totalCost);
+        } catch (error) {
+          this.logger.error('Failed to mint tokens:', error);
+          // Continue with response even if minting fails
+        }
       }
 
       // Store the interaction in conversation history
