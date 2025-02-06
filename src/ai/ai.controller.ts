@@ -59,21 +59,29 @@ export class AiController {
   @ApiOperation({
     summary: 'Ask questions with or without application context',
     description:
-      'Submit questions to Claude in two modes:\n\n' +
-      '1. With Context: Attach a markdown (.md) file containing context (persona, knowledge base, etc). ' +
-      'Claude will use this context to shape its responses.\n\n' +
-      '2. General Questions: Without a file attachment, Claude will answer based on existing conversation history.\n\n' +
-      'Use conversationId to continue an existing conversation in either mode.',
+      'Authentication via headers:\n\n' +
+      '1. x-api-key header, or\n' +
+      '2. x-context-id and x-wallet-address headers combined',
   })
   @ApiHeader({
     name: 'x-api-key',
-    description: 'API key for authentication',
-    required: true,
-    example: 'your-api-key-here',
+    description: 'Optional API key for authentication',
+    required: false,
+  })
+  @ApiHeader({
+    name: 'x-context-id',
+    description: 'Context ID for alternate authentication',
+    required: false,
+  })
+  @ApiHeader({
+    name: 'x-wallet-address',
+    description: 'Wallet address for alternate authentication',
+    required: false,
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description: 'Question with optional context file and conversation ID',
+    description:
+      'Question with optional context file, conversation ID, and auth params',
     type: AskClaudeDto,
   })
   @ApiResponse({
@@ -118,7 +126,8 @@ export class AiController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Invalid API key',
+    description:
+      'Invalid authentication (invalid API key or id/wallet combination)',
   })
   @ApiResponse({
     status: 413,
@@ -128,6 +137,8 @@ export class AiController {
     @Body() askClaudeDto: AskClaudeDto,
     @UploadedFile() file?: Express.Multer.File,
     @Headers('x-api-key') apiKey?: string,
+    @Headers('x-context-id') contextId?: string,
+    @Headers('x-wallet-address') walletAddress?: string,
   ): Promise<{
     answer: string;
     usage: { costs: ClaudeResponse['costs']; timestamp: string };
@@ -138,8 +149,8 @@ export class AiController {
       questionText: askClaudeDto.message,
       conversationId: askClaudeDto.conversationId,
       fileName: file?.originalname,
-      id: askClaudeDto.id,
-      walletAddress: askClaudeDto.walletAddress,
+      contextId,
+      walletAddress,
     });
 
     const result = await this.aiService.askClaude(
@@ -147,8 +158,8 @@ export class AiController {
       file,
       askClaudeDto.conversationId,
       apiKey,
-      askClaudeDto.walletAddress,
-      askClaudeDto.id,
+      walletAddress,
+      contextId,
     );
 
     return {

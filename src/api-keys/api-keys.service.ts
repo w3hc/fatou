@@ -149,4 +149,12 @@ export class ApiKeysService implements OnModuleInit {
     }
     return apiKey;
   }
+
+  async findApiKeyById(id: string): Promise<ApiKey | null> {
+    const apiKey = Object.values(this.apiKeys).find((key) => key.id === id);
+    if (!apiKey || !apiKey.isActive) {
+      return null;
+    }
+    return apiKey;
+  }
 }

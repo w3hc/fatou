@@ -57,19 +57,12 @@ export class AiService {
     }
   }
 
-  private async loadContextFiles(apiKey: string): Promise<string> {
+  async loadContextFiles(contextId: string): Promise<string> {
     try {
-      // Find API key data to get the ID
-      const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
-      if (!apiKeyData) {
-        this.logger.warn('No API key data found');
-        return '';
-      }
+      // Construct the context directory path directly from contextId
+      this.logger.log(`Given context id: ${contextId}`);
 
-      this.logger.log(`Loading context files for API key ID: ${apiKeyData.id}`);
-
-      // Construct the context directory path
-      const contextDir = join(process.cwd(), 'data', 'contexts', apiKeyData.id);
+      const contextDir = join(process.cwd(), 'data', 'contexts', contextId);
       this.logger.log(`Looking for context files in directory: ${contextDir}`);
 
       let dirExists = false;
@@ -81,13 +74,9 @@ export class AiService {
       }
 
       if (!dirExists) {
-        this.logger.warn(
-          `No context directory found for API key ${apiKeyData.id}`,
-        );
+        this.logger.warn(`No context directory found for ID ${contextId}`);
         return '';
       }
-
-      this.logger.log('Context directory found');
 
       // Read all files in the context directory
       const files = await fs.readdir(contextDir);
@@ -100,18 +89,13 @@ export class AiService {
       for (const file of files) {
         if (file.endsWith('.md')) {
           const filePath = join(contextDir, file);
-          this.logger.log(`Loading context file: ${file}`);
           const content = await fs.readFile(filePath, 'utf-8');
           contextContent += `\n\n${content}`;
           loadedFiles++;
-        } else {
-          this.logger.debug(`Skipping non-markdown file: ${file}`);
         }
       }
 
-      this.logger.log(
-        `Successfully loaded ${loadedFiles} markdown files as context`,
-      );
+      this.logger.log(`Successfully loaded ${loadedFiles} markdown files`);
       return contextContent;
     } catch (error) {
       this.logger.error('Error loading context files:', error);
@@ -155,7 +139,7 @@ export class AiService {
     conversationId?: string,
     apiKey?: string,
     walletAddress?: string,
-    id?: string,
+    contextId?: string,
   ): Promise<ClaudeResponse> {
     const anthropicApiKey = this.validateConfig();
 
@@ -188,22 +172,14 @@ export class AiService {
           await this.databaseService.getConversation(conversationId);
       }
 
-      // Load context files if API key is provided
+      // Load context files if contextId is provided
       let contextContent = '';
-      if (apiKey && id) {
-        const contextDir = join(process.cwd(), 'data', 'contexts', id);
-        try {
-          const files = await fs.readdir(contextDir);
-          for (const file of files) {
-            if (file.endsWith('.md')) {
-              const filePath = join(contextDir, file);
-              const content = await fs.readFile(filePath, 'utf-8');
-              contextContent += `\n\n${content}`;
-            }
-          }
-        } catch (error) {
-          this.logger.error('Error loading context files:', error);
-        }
+      if (contextId) {
+        contextContent = await this.loadContextFiles(contextId);
+        this.logger.debug(
+          'Loaded context content:',
+          contextContent.substring(0, 200) + '...',
+        );
       }
 
       // Prepare prompt with context and conversation history
