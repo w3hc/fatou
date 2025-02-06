@@ -143,26 +143,20 @@ export class AiService {
   ): Promise<ClaudeResponse> {
     const anthropicApiKey = this.validateConfig();
 
-    if (walletAddress) {
-      this.logger.log('Wallet address for token minting:', walletAddress);
-    }
-
     try {
       let conversation: Conversation | null = null;
+      let contextContent = '';
 
       // Handle existing conversation
       if (conversationId) {
         conversation =
           await this.databaseService.getConversation(conversationId);
         if (!conversation) {
-          this.logger.warn(
-            `Conversation ${conversationId} not found, creating new conversation`,
-          );
           conversationId = undefined;
         }
       }
 
-      // Create new conversation if none exists or if file is provided
+      // Create new conversation if needed
       if (!conversation) {
         conversationId = await this.databaseService.createConversation(
           file?.originalname,
@@ -172,50 +166,47 @@ export class AiService {
           await this.databaseService.getConversation(conversationId);
       }
 
-      // Load context files if contextId is provided
-      let contextContent = '';
-      if (contextId) {
+      // Load context based on auth method
+      if (apiKey) {
+        const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
+        if (apiKeyData) {
+          contextContent = await this.loadContextFiles(apiKeyData.id);
+        }
+      } else if (contextId) {
         contextContent = await this.loadContextFiles(contextId);
-        this.logger.debug(
-          'Loaded context content:',
-          contextContent.substring(0, 200) + '...',
-        );
       }
 
-      // Prepare prompt with context and conversation history
+      // Process request
       const content = await this.preparePrompt(
         message,
         conversation,
         contextContent,
       );
-
-      // Call Claude API
       const response = await this.callClaudeApi(content, anthropicApiKey);
       const costs = this.calculateCosts(response.usage);
 
-      // Track costs
+      // Handle costs and tokens
       if (apiKey) {
         const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
-        await this.costTrackingService.trackRequest(
-          apiKeyData?.walletAddress || '0x',
-          costs,
-          message,
-          conversationId,
-        );
+        if (apiKeyData?.walletAddress) {
+          await this.costTrackingService.trackRequest(
+            apiKeyData.walletAddress,
+            costs,
+            message,
+            conversationId,
+          );
+        }
       }
 
       // Mint tokens if wallet address is provided
       this.logger.debug('walletAddress:', walletAddress);
       if (walletAddress) {
-        try {
-          await this.mintTokens(walletAddress, costs.totalCost);
-        } catch (error) {
-          this.logger.error('Failed to mint tokens:', error);
-          // Continue with response even if minting fails
-        }
+        await this.mintTokens(walletAddress, costs.totalCost).catch((error) => {
+          this.logger.error('Token minting failed:', error);
+        });
       }
 
-      // Store the interaction in conversation history
+      // Save conversation history
       await this.databaseService.addMessage(conversationId, {
         role: 'user',
         content: message,
