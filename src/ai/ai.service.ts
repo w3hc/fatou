@@ -155,6 +155,7 @@ export class AiService {
     conversationId?: string,
     apiKey?: string,
     walletAddress?: string,
+    id?: string,
   ): Promise<ClaudeResponse> {
     const anthropicApiKey = this.validateConfig();
 
@@ -189,8 +190,20 @@ export class AiService {
 
       // Load context files if API key is provided
       let contextContent = '';
-      if (apiKey) {
-        contextContent = await this.loadContextFiles(apiKey);
+      if (apiKey && id) {
+        const contextDir = join(process.cwd(), 'data', 'contexts', id);
+        try {
+          const files = await fs.readdir(contextDir);
+          for (const file of files) {
+            if (file.endsWith('.md')) {
+              const filePath = join(contextDir, file);
+              const content = await fs.readFile(filePath, 'utf-8');
+              contextContent += `\n\n${content}`;
+            }
+          }
+        } catch (error) {
+          this.logger.error('Error loading context files:', error);
+        }
       }
 
       // Prepare prompt with context and conversation history

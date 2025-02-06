@@ -138,6 +138,7 @@ export class AiController {
       questionText: askClaudeDto.message,
       conversationId: askClaudeDto.conversationId,
       fileName: file?.originalname,
+      id: askClaudeDto.id,
       walletAddress: askClaudeDto.walletAddress,
     });
 
@@ -147,6 +148,7 @@ export class AiController {
       askClaudeDto.conversationId,
       apiKey,
       askClaudeDto.walletAddress,
+      askClaudeDto.id,
     );
 
     return {

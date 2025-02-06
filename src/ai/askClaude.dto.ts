@@ -25,10 +25,18 @@ export class AskClaudeDto {
   file?: any;
 
   @ApiProperty({
+    description: 'ID of the context directory',
+    required: false,
+    example: '2c9326c2-ee02-4227-be6d-a42866de8bcc',
+  })
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @ApiProperty({
     description: 'ID of the conversation to continue',
     required: false,
     example: 'abc123-def456',
-    type: 'string',
   })
   @IsOptional()
   @IsString()
