@@ -38,13 +38,48 @@ export class ApiKeysService implements OnModuleInit {
     return crypto.randomBytes(32).toString('hex');
   }
 
-  async createApiKey(walletAddress: string): Promise<ApiKey> {
+  private async verifySignatureTimestamp(
+    walletAddress: string,
+  ): Promise<boolean> {
+    try {
+      // Read sigs.json
+      const sigsPath = join(process.cwd(), 'data', 'sigs.json');
+      const sigsContent = await fs.readFile(sigsPath, 'utf-8');
+      const sigsData = JSON.parse(sigsContent);
+
+      const userSignature = sigsData.signatures[walletAddress.toLowerCase()];
+      if (!userSignature) {
+        return false;
+      }
+
+      // Calculate time difference
+      const signatureTime = new Date(userSignature.timestamp).getTime();
+      const currentTime = new Date().getTime();
+      const oneYearInMs = 365 * 24 * 60 * 60 * 1000;
+
+      // Check if the signature is less than a year old
+      return currentTime - signatureTime <= oneYearInMs;
+    } catch (error) {
+      this.logger.error('Error verifying signature timestamp:', error);
+      return false;
+    }
+  }
+
+  async createApiKey(walletAddress?: string): Promise<ApiKey> {
+    if (walletAddress) {
+      const hasValidSignature =
+        await this.verifySignatureTimestamp(walletAddress);
+      if (!hasValidSignature) {
+        throw new Error('Wallet must have logged in at least 1 year ago');
+      }
+    }
+
     const key = this.generateApiKey();
     const id = uuidv4();
     const apiKey: ApiKey = {
       id,
       key,
-      walletAddress,
+      ...(walletAddress && { walletAddress }), // Only include if walletAddress is provided
       createdAt: new Date().toISOString(),
       lastUsedAt: new Date().toISOString(),
       isActive: true,
@@ -99,12 +134,24 @@ export class ApiKeysService implements OnModuleInit {
 
   async listApiKeys(walletAddress: string): Promise<ApiKey[]> {
     return Object.values(this.apiKeys)
-      .filter((key) => key.walletAddress === walletAddress)
+      .filter((key) => {
+        // Handle both cases where walletAddress might be undefined
+        if (!walletAddress) return true;
+        return key.walletAddress === walletAddress;
+      })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async findApiKey(key: string): Promise<ApiKey | null> {
     const apiKey = this.apiKeys[key];
+    if (!apiKey || !apiKey.isActive) {
+      return null;
+    }
+    return apiKey;
+  }
+
+  async findApiKeyById(id: string): Promise<ApiKey | null> {
+    const apiKey = Object.values(this.apiKeys).find((key) => key.id === id);
     if (!apiKey || !apiKey.isActive) {
       return null;
     }

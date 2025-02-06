@@ -1,15 +1,10 @@
-import {
-  IsNotEmpty,
-  IsString,
-  IsOptional,
-  IsEthereumAddress,
-} from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AskClaudeDto {
   @ApiProperty({
     description: 'The message to send to Claude',
-    example: 'Who are you?',
+    example: 'Who are you? (in 1 word)',
   })
   @IsNotEmpty()
   @IsString()
@@ -27,19 +22,9 @@ export class AskClaudeDto {
   @ApiProperty({
     description: 'ID of the conversation to continue',
     required: false,
-    example: 'abc123-def456',
-    type: 'string',
+    example: '',
   })
   @IsOptional()
   @IsString()
   conversationId?: string;
-
-  @ApiProperty({
-    description: 'Ethereum wallet address',
-    required: false,
-    example: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-  })
-  @IsOptional()
-  @IsEthereumAddress()
-  walletAddress?: string;
 }

@@ -57,19 +57,12 @@ export class AiService {
     }
   }
 
-  private async loadContextFiles(apiKey: string): Promise<string> {
+  async loadContextFiles(contextId: string): Promise<string> {
     try {
-      // Find API key data to get the ID
-      const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
-      if (!apiKeyData) {
-        this.logger.warn('No API key data found');
-        return '';
-      }
+      // Construct the context directory path directly from contextId
+      this.logger.log(`Given context id: ${contextId}`);
 
-      this.logger.log(`Loading context files for API key ID: ${apiKeyData.id}`);
-
-      // Construct the context directory path
-      const contextDir = join(process.cwd(), 'data', 'contexts', apiKeyData.id);
+      const contextDir = join(process.cwd(), 'data', 'contexts', contextId);
       this.logger.log(`Looking for context files in directory: ${contextDir}`);
 
       let dirExists = false;
@@ -81,13 +74,9 @@ export class AiService {
       }
 
       if (!dirExists) {
-        this.logger.warn(
-          `No context directory found for API key ${apiKeyData.id}`,
-        );
+        this.logger.warn(`No context directory found for ID ${contextId}`);
         return '';
       }
-
-      this.logger.log('Context directory found');
 
       // Read all files in the context directory
       const files = await fs.readdir(contextDir);
@@ -100,18 +89,13 @@ export class AiService {
       for (const file of files) {
         if (file.endsWith('.md')) {
           const filePath = join(contextDir, file);
-          this.logger.log(`Loading context file: ${file}`);
           const content = await fs.readFile(filePath, 'utf-8');
           contextContent += `\n\n${content}`;
           loadedFiles++;
-        } else {
-          this.logger.debug(`Skipping non-markdown file: ${file}`);
         }
       }
 
-      this.logger.log(
-        `Successfully loaded ${loadedFiles} markdown files as context`,
-      );
+      this.logger.log(`Successfully loaded ${loadedFiles} markdown files`);
       return contextContent;
     } catch (error) {
       this.logger.error('Error loading context files:', error);
@@ -155,29 +139,24 @@ export class AiService {
     conversationId?: string,
     apiKey?: string,
     walletAddress?: string,
+    contextId?: string,
   ): Promise<ClaudeResponse> {
     const anthropicApiKey = this.validateConfig();
 
-    if (walletAddress) {
-      this.logger.log('Wallet address for token minting:', walletAddress);
-    }
-
     try {
       let conversation: Conversation | null = null;
+      let contextContent = '';
 
       // Handle existing conversation
       if (conversationId) {
         conversation =
           await this.databaseService.getConversation(conversationId);
         if (!conversation) {
-          this.logger.warn(
-            `Conversation ${conversationId} not found, creating new conversation`,
-          );
           conversationId = undefined;
         }
       }
 
-      // Create new conversation if none exists or if file is provided
+      // Create new conversation if needed
       if (!conversation) {
         conversationId = await this.databaseService.createConversation(
           file?.originalname,
@@ -187,46 +166,47 @@ export class AiService {
           await this.databaseService.getConversation(conversationId);
       }
 
-      // Load context files if API key is provided
-      let contextContent = '';
+      // Load context based on auth method
       if (apiKey) {
-        contextContent = await this.loadContextFiles(apiKey);
+        const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
+        if (apiKeyData) {
+          contextContent = await this.loadContextFiles(apiKeyData.id);
+        }
+      } else if (contextId) {
+        contextContent = await this.loadContextFiles(contextId);
       }
 
-      // Prepare prompt with context and conversation history
+      // Process request
       const content = await this.preparePrompt(
         message,
         conversation,
         contextContent,
       );
-
-      // Call Claude API
       const response = await this.callClaudeApi(content, anthropicApiKey);
       const costs = this.calculateCosts(response.usage);
 
-      // Track costs
+      // Handle costs and tokens
       if (apiKey) {
         const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
-        await this.costTrackingService.trackRequest(
-          apiKeyData?.walletAddress || '0x',
-          costs,
-          message,
-          conversationId,
-        );
+        if (apiKeyData?.walletAddress) {
+          await this.costTrackingService.trackRequest(
+            apiKeyData.walletAddress,
+            costs,
+            message,
+            conversationId,
+          );
+        }
       }
 
       // Mint tokens if wallet address is provided
       this.logger.debug('walletAddress:', walletAddress);
       if (walletAddress) {
-        try {
-          await this.mintTokens(walletAddress, costs.totalCost);
-        } catch (error) {
-          this.logger.error('Failed to mint tokens:', error);
-          // Continue with response even if minting fails
-        }
+        await this.mintTokens(walletAddress, costs.totalCost).catch((error) => {
+          this.logger.error('Token minting failed:', error);
+        });
       }
 
-      // Store the interaction in conversation history
+      // Save conversation history
       await this.databaseService.addMessage(conversationId, {
         role: 'user',
         content: message,

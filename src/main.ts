@@ -9,7 +9,12 @@ async function bootstrap() {
   app.enableCors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'x-api-key'],
+    allowedHeaders: [
+      'Content-Type',
+      'x-api-key',
+      'x-context-id',
+      'x-wallet-address',
+    ],
   });
 
   app.useGlobalPipes(new ValidationPipe());

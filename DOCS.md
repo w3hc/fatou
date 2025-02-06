@@ -107,7 +107,7 @@ POST /api-keys
 x-api-key: master-key-here
 
 {
-  "walletAddress": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+  "walletAddress": "0xD8a394e7d7894bDF2C57139fF17e5CBAa29Dd977"
 }
 ```
 
