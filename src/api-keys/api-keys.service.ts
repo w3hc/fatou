@@ -39,7 +39,7 @@ export class ApiKeysService implements OnModuleInit {
   }
 
   private async saveData(): Promise<void> {
-    console.log('Saving API keys:', JSON.stringify(this.apiKeys, null, 2));
+    // console.log('Saving API keys:', JSON.stringify(this.apiKeys, null, 2));
     await fs.writeFile(this.dbPath, JSON.stringify(this.apiKeys, null, 2));
   }
 
