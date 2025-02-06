@@ -4,6 +4,7 @@ import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { ApiKey } from './types';
 import * as crypto from 'crypto';
+import { AssistantDetail } from './types';
 
 interface AssistantDetails {
   slug?: string;
@@ -174,5 +175,19 @@ export class ApiKeysService implements OnModuleInit {
     Object.assign(apiKey, details);
     await this.saveData();
     return apiKey;
+  }
+
+  async getAllAssistantDetails(): Promise<AssistantDetail[]> {
+    return Object.values(this.apiKeys)
+      .filter((key) => key.isActive)
+      .map((key) => ({
+        slug: key.slug || '',
+        contextId: key.id || '',
+        name: key.assistantName || '',
+        introPhrase: key.introPhrase || '',
+        daoAddress: key.daoAddress || '',
+        daoNetwork: key.daoNetwork || '',
+      }))
+      .sort((a, b) => (a.slug || '').localeCompare(b.slug || ''));
   }
 }

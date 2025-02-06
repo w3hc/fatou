@@ -11,3 +11,12 @@ export interface ApiKey {
   daoAddress: string;
   daoNetwork: string;
 }
+
+export interface AssistantDetail {
+  slug: string;
+  contextId: string;
+  name: string;
+  introPhrase: string;
+  daoAddress: string;
+  daoNetwork: string;
+}

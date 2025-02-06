@@ -18,6 +18,8 @@ import {
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { IsString, IsEthereumAddress, IsOptional } from 'class-validator';
+import { Public } from '../auth/public.decorator';
+import { AssistantDetail } from './types';
 
 class CreateApiKeyDto {
   @ApiProperty({
@@ -164,5 +166,51 @@ export class ApiKeysController {
   @ApiOperation({ summary: 'List API keys for wallet' })
   async listApiKeys(@Param('address') address: string) {
     return this.apiKeysService.listApiKeys(address);
+  }
+
+  @Get('details')
+  @Public()
+  @ApiOperation({
+    summary: 'Get all assistant details',
+    description: 'Returns an array of all assistant details',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Successfully retrieved all details',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          slug: {
+            type: 'string',
+            description: 'Assistant slug',
+          },
+          contextId: {
+            type: 'string',
+            description: 'Context ID',
+          },
+          name: {
+            type: 'string',
+            description: 'Assistant name',
+          },
+          introPhrase: {
+            type: 'string',
+            description: 'Introduction phrase',
+          },
+          daoAddress: {
+            type: 'string',
+            description: 'DAO address',
+          },
+          daoNetwork: {
+            type: 'string',
+            description: 'DAO network',
+          },
+        },
+      },
+    },
+  })
+  async getAssistantDetails(): Promise<AssistantDetail[]> {
+    return this.apiKeysService.getAllAssistantDetails();
   }
 }
