@@ -5,6 +5,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { ApiKey } from './types';
 import * as crypto from 'crypto';
 
+interface AssistantDetails {
+  slug?: string;
+  assistantName?: string;
+  introPhrase?: string;
+  daoAddress?: string;
+  daoNetwork?: string;
+}
+
 @Injectable()
 export class ApiKeysService implements OnModuleInit {
   private readonly logger = new Logger(ApiKeysService.name);
@@ -31,6 +39,7 @@ export class ApiKeysService implements OnModuleInit {
   }
 
   private async saveData(): Promise<void> {
+    console.log('Saving API keys:', JSON.stringify(this.apiKeys, null, 2));
     await fs.writeFile(this.dbPath, JSON.stringify(this.apiKeys, null, 2));
   }
 
@@ -42,22 +51,17 @@ export class ApiKeysService implements OnModuleInit {
     walletAddress: string,
   ): Promise<boolean> {
     try {
-      // Read sigs.json
       const sigsPath = join(process.cwd(), 'data', 'sigs.json');
       const sigsContent = await fs.readFile(sigsPath, 'utf-8');
       const sigsData = JSON.parse(sigsContent);
 
       const userSignature = sigsData.signatures[walletAddress.toLowerCase()];
-      if (!userSignature) {
-        return false;
-      }
+      if (!userSignature) return false;
 
-      // Calculate time difference
       const signatureTime = new Date(userSignature.timestamp).getTime();
       const currentTime = new Date().getTime();
       const oneYearInMs = 365 * 24 * 60 * 60 * 1000;
 
-      // Check if the signature is less than a year old
       return currentTime - signatureTime <= oneYearInMs;
     } catch (error) {
       this.logger.error('Error verifying signature timestamp:', error);
@@ -65,7 +69,16 @@ export class ApiKeysService implements OnModuleInit {
     }
   }
 
-  async createApiKey(walletAddress?: string): Promise<ApiKey> {
+  async createApiKey(
+    walletAddress?: string,
+    options: {
+      slug?: string;
+      assistantName?: string;
+      introPhrase?: string;
+      daoAddress?: string;
+      daoNetwork?: string;
+    } = {},
+  ): Promise<ApiKey> {
     if (walletAddress) {
       const hasValidSignature =
         await this.verifySignatureTimestamp(walletAddress);
@@ -79,16 +92,20 @@ export class ApiKeysService implements OnModuleInit {
     const apiKey: ApiKey = {
       id,
       key,
-      ...(walletAddress && { walletAddress }), // Only include if walletAddress is provided
+      ...(walletAddress && { walletAddress }),
       createdAt: new Date().toISOString(),
       lastUsedAt: new Date().toISOString(),
       isActive: true,
+      slug: options.slug,
+      assistantName: options.assistantName,
+      introPhrase: options.introPhrase,
+      daoAddress: options.daoAddress,
+      daoNetwork: options.daoNetwork,
     };
 
     this.apiKeys[key] = apiKey;
     await this.saveData();
 
-    // Create contexts directory for the new API key
     const contextDir = join(process.cwd(), 'data', 'contexts', id);
     try {
       await fs.mkdir(contextDir, { recursive: true });
@@ -98,7 +115,6 @@ export class ApiKeysService implements OnModuleInit {
         `Failed to create context directory for API key: ${id}`,
         error,
       );
-      // Don't throw the error as the API key creation was successful
     }
 
     return apiKey;
@@ -134,27 +150,29 @@ export class ApiKeysService implements OnModuleInit {
 
   async listApiKeys(walletAddress: string): Promise<ApiKey[]> {
     return Object.values(this.apiKeys)
-      .filter((key) => {
-        // Handle both cases where walletAddress might be undefined
-        if (!walletAddress) return true;
-        return key.walletAddress === walletAddress;
-      })
+      .filter((key) => !walletAddress || key.walletAddress === walletAddress)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async findApiKey(key: string): Promise<ApiKey | null> {
     const apiKey = this.apiKeys[key];
-    if (!apiKey || !apiKey.isActive) {
-      return null;
-    }
-    return apiKey;
+    return apiKey && apiKey.isActive ? apiKey : null;
   }
 
   async findApiKeyById(id: string): Promise<ApiKey | null> {
     const apiKey = Object.values(this.apiKeys).find((key) => key.id === id);
-    if (!apiKey || !apiKey.isActive) {
-      return null;
-    }
+    return apiKey && apiKey.isActive ? apiKey : null;
+  }
+
+  async updateApiKey(
+    key: string,
+    details: Partial<AssistantDetails>,
+  ): Promise<ApiKey | null> {
+    const apiKey = this.apiKeys[key];
+    if (!apiKey || !apiKey.isActive) return null;
+
+    Object.assign(apiKey, details);
+    await this.saveData();
     return apiKey;
   }
 }

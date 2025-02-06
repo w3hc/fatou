@@ -17,7 +17,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import { IsEthereumAddress, IsOptional } from 'class-validator';
+import { IsString, IsEthereumAddress, IsOptional } from 'class-validator';
 
 class CreateApiKeyDto {
   @ApiProperty({
@@ -28,6 +28,31 @@ class CreateApiKeyDto {
   @IsEthereumAddress()
   @IsOptional()
   walletAddress?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  slug?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  assistantName?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  introPhrase?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  daoAddress?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  daoNetwork?: string;
 }
 
 @ApiTags('API Keys')
@@ -104,7 +129,16 @@ export class ApiKeysController {
   ) {
     this.validateMasterKey(apiKey);
     try {
-      const newKey = await this.apiKeysService.createApiKey(body.walletAddress);
+      const newKey = await this.apiKeysService.createApiKey(
+        body.walletAddress,
+        {
+          slug: body.slug,
+          assistantName: body.assistantName,
+          introPhrase: body.introPhrase,
+          daoAddress: body.daoAddress,
+          daoNetwork: body.daoNetwork,
+        },
+      );
       return { key: newKey.key };
     } catch (error) {
       if (error.message.includes('Wallet must have logged in')) {
