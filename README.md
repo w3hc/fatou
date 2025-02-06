@@ -71,7 +71,7 @@ pnpm test:cov        # Test coverage
 ```bash
 curl -X POST http://localhost:3000/auth/get-message \
   -H "Content-Type: application/json" \
-  -d '{"walletAddress": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"}'
+  -d '{"walletAddress": "0xD8a394e7d7894bDF2C57139fF17e5CBAa29Dd977"}'
 ```
 
 ### 2. Ask Claude a Question
