@@ -8,6 +8,7 @@ import {
   UploadedFile,
   BadRequestException,
   Delete,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -26,6 +27,7 @@ import { ApiKeysService } from './api-keys.service';
 import { diskStorage } from 'multer';
 import { StreamableFile } from '@nestjs/common';
 import { createReadStream } from 'fs';
+import { Request } from 'express';
 
 // DTO for the request body
 export class ListFilesDto {
@@ -94,27 +96,27 @@ export class ContextFilesController {
       'Returns a list of markdown files in the specified context directory',
   })
   @ApiHeader({
-    name: 'x-api-key',
-    description: 'API key for authentication',
-    required: true,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'List of files retrieved successfully',
-    type: ListFilesResponseDto,
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Invalid API key',
+    name: 'x-wallet-address',
+    description: 'Wallet address for authentication',
+    required: false,
   })
   async listFiles(
-    @Headers('x-api-key') apiKey: string,
+    @Headers('x-wallet-address') walletAddress: string,
     @Body() listFilesDto: ListFilesDto,
-  ): Promise<ListFilesResponseDto> {
-    // Validate API key
-    const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
+    @Req() request: Request,
+  ) {
+    // Use API key from request if available (set by guard)
+    let apiKeyData = (request as any).apiKey;
+
     if (!apiKeyData) {
-      throw new UnauthorizedException('Invalid API key');
+      // If no API key in request, try to find one for the wallet address
+      console.log('walletAddress:', walletAddress);
+      const apiKeys = await this.apiKeysService.listApiKeys(walletAddress);
+      const activeKey = apiKeys.find((key) => key.isActive);
+      if (!activeKey) {
+        throw new UnauthorizedException('Invalid wallet address');
+      }
+      apiKeyData = activeKey;
     }
 
     // Construct path to context directory
@@ -126,10 +128,7 @@ export class ContextFilesController {
     );
 
     try {
-      // Try to read the directory
       const files = await fs.readdir(contextPath);
-
-      // Filter for markdown files
       const markdownFiles = files.filter((file) => file.endsWith('.md'));
 
       return {
@@ -137,19 +136,15 @@ export class ContextFilesController {
         files: markdownFiles,
       };
     } catch (error) {
-      // If directory doesn't exist, return empty list
       if (error.code === 'ENOENT') {
         return {
           id: listFilesDto.id,
           files: [],
         };
       }
-
-      // For any other error, rethrow it
       throw error;
     }
   }
-
   @Post('add-context')
   @ApiOperation({
     summary: 'Upload context file',
