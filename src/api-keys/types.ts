@@ -19,4 +19,5 @@ export interface AssistantDetail {
   introPhrase: string;
   daoAddress: string;
   daoNetwork: string;
+  adminAddress: string;
 }

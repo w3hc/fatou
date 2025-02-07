@@ -187,6 +187,7 @@ export class ApiKeysService implements OnModuleInit {
         introPhrase: key.introPhrase || '',
         daoAddress: key.daoAddress || '',
         daoNetwork: key.daoNetwork || '',
+        adminAddress: key.walletAddress || '',
       }))
       .sort((a, b) => (a.slug || '').localeCompare(b.slug || ''));
   }
