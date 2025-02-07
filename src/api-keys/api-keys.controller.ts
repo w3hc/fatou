@@ -17,7 +17,9 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import { IsEthereumAddress, IsOptional } from 'class-validator';
+import { IsString, IsEthereumAddress, IsOptional } from 'class-validator';
+import { Public } from '../auth/public.decorator';
+import { AssistantDetail } from './types';
 
 class CreateApiKeyDto {
   @ApiProperty({
@@ -28,6 +30,31 @@ class CreateApiKeyDto {
   @IsEthereumAddress()
   @IsOptional()
   walletAddress?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  slug?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  assistantName?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  introPhrase?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  daoAddress?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  daoNetwork?: string;
 }
 
 @ApiTags('API Keys')
@@ -104,7 +131,16 @@ export class ApiKeysController {
   ) {
     this.validateMasterKey(apiKey);
     try {
-      const newKey = await this.apiKeysService.createApiKey(body.walletAddress);
+      const newKey = await this.apiKeysService.createApiKey(
+        body.walletAddress,
+        {
+          slug: body.slug,
+          assistantName: body.assistantName,
+          introPhrase: body.introPhrase,
+          daoAddress: body.daoAddress,
+          daoNetwork: body.daoNetwork,
+        },
+      );
       return { key: newKey.key };
     } catch (error) {
       if (error.message.includes('Wallet must have logged in')) {
@@ -130,5 +166,51 @@ export class ApiKeysController {
   @ApiOperation({ summary: 'List API keys for wallet' })
   async listApiKeys(@Param('address') address: string) {
     return this.apiKeysService.listApiKeys(address);
+  }
+
+  @Get('details')
+  @Public()
+  @ApiOperation({
+    summary: 'Get all assistant details',
+    description: 'Returns an array of all assistant details',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Successfully retrieved all details',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          slug: {
+            type: 'string',
+            description: 'Assistant slug',
+          },
+          contextId: {
+            type: 'string',
+            description: 'Context ID',
+          },
+          name: {
+            type: 'string',
+            description: 'Assistant name',
+          },
+          introPhrase: {
+            type: 'string',
+            description: 'Introduction phrase',
+          },
+          daoAddress: {
+            type: 'string',
+            description: 'DAO address',
+          },
+          daoNetwork: {
+            type: 'string',
+            description: 'DAO network',
+          },
+        },
+      },
+    },
+  })
+  async getAssistantDetails(): Promise<AssistantDetail[]> {
+    return this.apiKeysService.getAllAssistantDetails();
   }
 }
