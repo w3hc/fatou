@@ -31,25 +31,30 @@ export class ApiKeyGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const apiKey = request.header('x-api-key');
-    const contextId = request.header('x-context-id');
     const walletAddress = request.header('x-wallet-address');
     const masterKey = this.configService.get<string>('MASTER_KEY');
 
+    // Check master key first
+    if (apiKey === masterKey) return true;
+
+    // If API key provided, validate it
     if (apiKey) {
-      if (apiKey === masterKey) return true;
       const isValidApiKey = await this.apiKeysService.validateApiKey(apiKey);
       if (isValidApiKey) return true;
-      throw new UnauthorizedException('Invalid API key');
     }
 
-    if (contextId && walletAddress) {
-      const apiKeyData = await this.apiKeysService.findApiKeyById(contextId);
-      if (!apiKeyData) throw new UnauthorizedException('Invalid context ID');
-      return true;
+    // If wallet address provided, check if it's associated with any API key
+    if (walletAddress) {
+      const apiKeys = await this.apiKeysService.listApiKeys(walletAddress);
+      if (apiKeys.some((key) => key.isActive)) {
+        // Store the found API key in the request for later use
+        request.apiKey = apiKeys.find((key) => key.isActive);
+        return true;
+      }
     }
 
     throw new UnauthorizedException(
-      'Authentication required - provide either API key or context-id/wallet-address headers',
+      'Authentication required - provide either API key or wallet address',
     );
   }
 }

@@ -80,7 +80,17 @@ export class ApiKeysService implements OnModuleInit {
       daoNetwork?: string;
     } = {},
   ): Promise<ApiKey> {
+    // First check if wallet address already exists
     if (walletAddress) {
+      const existingApiKey = Object.values(this.apiKeys).find(
+        (key) =>
+          key.walletAddress?.toLowerCase() === walletAddress.toLowerCase(),
+      );
+
+      if (existingApiKey) {
+        throw new Error('An API key already exists for this wallet address');
+      }
+
       const hasValidSignature =
         await this.verifySignatureTimestamp(walletAddress);
       if (!hasValidSignature) {

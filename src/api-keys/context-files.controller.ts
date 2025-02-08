@@ -87,6 +87,24 @@ export class DownloadContextFileDto {
 export class ContextFilesController {
   constructor(private readonly apiKeysService: ApiKeysService) {}
 
+  private async validateAdminAccess(
+    walletAddress: string,
+    contextId: string,
+  ): Promise<void> {
+    // Get all assistants and find the one matching the context ID
+    const assistants = await this.apiKeysService.getAllAssistantDetails();
+    const assistant = assistants.find((a) => a.contextId === contextId);
+
+    if (!assistant) {
+      throw new BadRequestException('Invalid context ID');
+    }
+
+    // Check if the wallet address matches the admin address
+    if (walletAddress.toLowerCase() !== assistant.adminAddress.toLowerCase()) {
+      throw new UnauthorizedException('Unauthorized access to context files');
+    }
+  }
+
   @Post('list-files')
   @ApiOperation({
     summary: 'List files in context directory',
@@ -94,30 +112,16 @@ export class ContextFilesController {
       'Returns a list of markdown files in the specified context directory',
   })
   @ApiHeader({
-    name: 'x-api-key',
-    description: 'API key for authentication',
+    name: 'x-wallet-address',
+    description: 'Wallet address for authentication',
     required: true,
   })
-  @ApiResponse({
-    status: 200,
-    description: 'List of files retrieved successfully',
-    type: ListFilesResponseDto,
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Invalid API key',
-  })
   async listFiles(
-    @Headers('x-api-key') apiKey: string,
+    @Headers('x-wallet-address') walletAddress: string,
     @Body() listFilesDto: ListFilesDto,
-  ): Promise<ListFilesResponseDto> {
-    // Validate API key
-    const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
-    if (!apiKeyData) {
-      throw new UnauthorizedException('Invalid API key');
-    }
+  ) {
+    await this.validateAdminAccess(walletAddress, listFilesDto.id);
 
-    // Construct path to context directory
     const contextPath = join(
       process.cwd(),
       'data',
@@ -126,10 +130,7 @@ export class ContextFilesController {
     );
 
     try {
-      // Try to read the directory
       const files = await fs.readdir(contextPath);
-
-      // Filter for markdown files
       const markdownFiles = files.filter((file) => file.endsWith('.md'));
 
       return {
@@ -137,15 +138,12 @@ export class ContextFilesController {
         files: markdownFiles,
       };
     } catch (error) {
-      // If directory doesn't exist, return empty list
       if (error.code === 'ENOENT') {
         return {
           id: listFilesDto.id,
           files: [],
         };
       }
-
-      // For any other error, rethrow it
       throw error;
     }
   }
@@ -154,7 +152,7 @@ export class ContextFilesController {
   @ApiOperation({
     summary: 'Upload context file',
     description:
-      'Upload a markdown file to be used as context for the API key. If a file with the same name exists, it will be replaced.',
+      'Upload a markdown file to be used as context. If a file with the same name exists, it will be replaced.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -162,8 +160,8 @@ export class ContextFilesController {
     type: UploadContextFileDto,
   })
   @ApiHeader({
-    name: 'x-api-key',
-    description: 'API key for authentication',
+    name: 'x-wallet-address',
+    description: 'Wallet address for authentication',
     required: true,
   })
   @ApiResponse({
@@ -202,27 +200,32 @@ export class ContextFilesController {
     }),
   )
   async addContext(
-    @Headers('x-api-key') apiKey: string,
+    @Headers('x-wallet-address') walletAddress: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    // Validate API key and get API key data
-    const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
-    if (!apiKeyData) {
-      throw new UnauthorizedException('Invalid API key');
-    }
-
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
-    try {
-      // Construct the path to the context directory for this API key
-      const contextDir = join(process.cwd(), 'data', 'contexts', apiKeyData.id);
+    // Find the assistant for this admin
+    const assistants = await this.apiKeysService.getAllAssistantDetails();
+    const adminAssistant = assistants.find(
+      (a) => a.adminAddress.toLowerCase() === walletAddress.toLowerCase(),
+    );
 
-      // Ensure the directory exists
+    if (!adminAssistant) {
+      throw new UnauthorizedException('No assistant found for this admin');
+    }
+
+    try {
+      const contextDir = join(
+        process.cwd(),
+        'data',
+        'contexts',
+        adminAssistant.contextId,
+      );
       await fs.mkdir(contextDir, { recursive: true });
 
-      // Check if file already exists
       const contextFilePath = join(contextDir, file.originalname);
       let fileExists = false;
       try {
@@ -232,15 +235,11 @@ export class ContextFilesController {
         fileExists = false;
       }
 
-      // If file exists, remove it first
       if (fileExists) {
         await fs.unlink(contextFilePath);
       }
 
-      // Copy new file from uploads to context directory
       await fs.copyFile(file.path, contextFilePath);
-
-      // Clean up the uploaded file from the uploads directory
       await fs.unlink(file.path);
 
       return {
@@ -251,7 +250,6 @@ export class ContextFilesController {
         replaced: fileExists,
       };
     } catch (error) {
-      // Clean up uploaded file in case of error
       if (file?.path) {
         try {
           await fs.unlink(file.path);
@@ -259,7 +257,6 @@ export class ContextFilesController {
           // Ignore cleanup errors
         }
       }
-
       throw new BadRequestException(
         'Failed to save context file: ' + error.message,
       );
@@ -272,38 +269,39 @@ export class ContextFilesController {
     description: 'Delete a specific markdown file from the context directory',
   })
   @ApiHeader({
-    name: 'x-api-key',
-    description: 'API key for authentication',
+    name: 'x-wallet-address',
+    description: 'Wallet address for authentication',
     required: true,
   })
   async deleteContext(
-    @Headers('x-api-key') apiKey: string,
+    @Headers('x-wallet-address') walletAddress: string,
     @Body() deleteFileDto: DeleteContextFileDto,
   ) {
-    // Validate API key and get API key data
-    const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
-    if (!apiKeyData) {
-      throw new UnauthorizedException('Invalid API key');
+    // Find the assistant for this admin
+    const assistants = await this.apiKeysService.getAllAssistantDetails();
+    const adminAssistant = assistants.find(
+      (a) => a.adminAddress.toLowerCase() === walletAddress.toLowerCase(),
+    );
+
+    if (!adminAssistant) {
+      throw new UnauthorizedException('No assistant found for this admin');
     }
 
     try {
-      // Construct the path to the file
       const filePath = join(
         process.cwd(),
         'data',
         'contexts',
-        apiKeyData.id,
+        adminAssistant.contextId,
         deleteFileDto.filename,
       );
 
-      // Check if file exists
       try {
         await fs.access(filePath);
       } catch (error) {
         throw new BadRequestException('File not found');
       }
 
-      // Delete the file
       await fs.unlink(filePath);
 
       return {
@@ -326,54 +324,41 @@ export class ContextFilesController {
     description: 'Download a specific markdown file from the context directory',
   })
   @ApiHeader({
-    name: 'x-api-key',
-    description: 'API key for authentication',
+    name: 'x-wallet-address',
+    description: 'Wallet address for authentication',
     required: true,
   })
-  @ApiBody({ type: DownloadContextFileDto })
-  @ApiResponse({
-    status: 200,
-    description: 'File downloaded successfully',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'File not found or invalid request',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Invalid API key',
-  })
   async downloadContext(
-    @Headers('x-api-key') apiKey: string,
+    @Headers('x-wallet-address') walletAddress: string,
     @Body() downloadFileDto: DownloadContextFileDto,
   ): Promise<StreamableFile> {
-    // Validate API key and get API key data
-    const apiKeyData = await this.apiKeysService.findApiKey(apiKey);
-    if (!apiKeyData) {
-      throw new UnauthorizedException('Invalid API key');
+    // Find the assistant for this admin
+    const assistants = await this.apiKeysService.getAllAssistantDetails();
+    const adminAssistant = assistants.find(
+      (a) => a.adminAddress.toLowerCase() === walletAddress.toLowerCase(),
+    );
+
+    if (!adminAssistant) {
+      throw new UnauthorizedException('No assistant found for this admin');
     }
 
     try {
-      // Construct the path to the file
       const filePath = join(
         process.cwd(),
         'data',
         'contexts',
-        apiKeyData.id,
+        adminAssistant.contextId,
         downloadFileDto.filename,
       );
 
-      // Check if file exists
       try {
         await fs.access(filePath);
       } catch (error) {
         throw new BadRequestException('File not found');
       }
 
-      // Create a read stream from the file
       const file = createReadStream(filePath);
 
-      // Return the streamable file with appropriate headers
       return new StreamableFile(file, {
         disposition: `attachment; filename="${downloadFileDto.filename}"`,
         type: 'text/markdown',
