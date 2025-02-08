@@ -7,6 +7,7 @@ import {
   Param,
   UnauthorizedException,
   Headers,
+  ConflictException,
 } from '@nestjs/common';
 import { ApiKeysService } from './api-keys.service';
 import {
@@ -145,6 +146,9 @@ export class ApiKeysController {
     } catch (error) {
       if (error.message.includes('Wallet must have logged in')) {
         throw new UnauthorizedException(error.message);
+      }
+      if (error.message.includes('already exists for this wallet')) {
+        throw new ConflictException(error.message);
       }
       throw error;
     }
